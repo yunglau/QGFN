@@ -255,19 +255,21 @@ class MolBuildingEnvContext(GraphBuildingEnvContext):
             raise ValueError(f"Unknown action type {action.action}")
         return (type_idx, int(row), int(col))
 
-    def graph_to_Data(self, g: Graph) -> gd.Data:
+    def graph_to_Data(self, g: Graph, t: Optional[int] = None) -> gd.Data:
         """Convert a networkx Graph to a torch geometric Data instance"""
-        x = np.zeros((max(1, len(g.nodes)), self.num_node_dim - self.num_rw_feat))
+        if hasattr(g, "_cached_Data"):
+            return g._cached_Data
+        x = torch.zeros((max(1, len(g.nodes)), self.num_node_dim - self.num_rw_feat))
         x[0, -1] = len(g.nodes) == 0
-        add_node_mask = np.ones((x.shape[0], self.num_new_node_values))
+        add_node_mask = torch.ones((x.shape[0], self.num_new_node_values))
         if self.max_nodes is not None and len(g.nodes) >= self.max_nodes:
             add_node_mask *= 0
-        remove_node_mask = np.zeros((x.shape[0], 1)) + (1 if len(g) == 0 else 0)
-        remove_node_attr_mask = np.zeros((x.shape[0], len(self.settable_atom_attrs)))
+        remove_node_mask = torch.zeros((x.shape[0], 1)) + (1 if len(g) == 0 else 0)
+        remove_node_attr_mask = torch.zeros((x.shape[0], len(self.settable_atom_attrs)))
 
         explicit_valence = {}
         max_valence = {}
-        set_node_attr_mask = np.ones((x.shape[0], self.num_node_attr_logits))
+        set_node_attr_mask = torch.ones((x.shape[0], self.num_node_attr_logits))
         bridges = set(nx.bridges(g))
         if not len(g.nodes):
             set_node_attr_mask *= 0
@@ -326,14 +328,14 @@ class MolBuildingEnvContext(GraphBuildingEnvContext):
                 s, e = self.atom_attr_logit_slice["expl_H"]
                 set_node_attr_mask[i, s:e] = 0
 
-        remove_edge_mask = np.zeros((len(g.edges), 1))
+        remove_edge_mask = torch.zeros((len(g.edges), 1))
         for i, e in enumerate(g.edges):
             if e not in bridges:
                 remove_edge_mask[i] = 1
 
-        edge_attr = np.zeros((len(g.edges) * 2, self.num_edge_dim))
-        set_edge_attr_mask = np.zeros((len(g.edges), self.num_edge_attr_logits))
-        remove_edge_attr_mask = np.zeros((len(g.edges), len(self.bond_attrs)))
+        edge_attr = torch.zeros((len(g.edges) * 2, self.num_edge_dim))
+        set_edge_attr_mask = torch.zeros((len(g.edges), self.num_edge_attr_logits))
+        remove_edge_attr_mask = torch.zeros((len(g.edges), len(self.bond_attrs)))
         for i, e in enumerate(g.edges):
             ad = g.edges[e]
             for k, sl in zip(self.bond_attrs, self.bond_attr_slice):
@@ -351,13 +353,13 @@ class MolBuildingEnvContext(GraphBuildingEnvContext):
                     # -1 because we'd be removing the single bond and replacing it with a double/triple/aromatic bond
                     is_ok = all([explicit_valence[n] + self._bond_valence[bond_type] - 1 <= max_valence[n] for n in e])
                     set_edge_attr_mask[i, sl + ti] = float(is_ok)
-        edge_index = np.array([e for i, j in g.edges for e in [(i, j), (j, i)]]).reshape((-1, 2)).T.astype(np.int64)
+        edge_index = torch.tensor([e for i, j in g.edges for e in [(i, j), (j, i)]], dtype=torch.long).reshape((-1, 2)).T
 
         if self.max_edges is not None and len(g.edges) >= self.max_edges:
-            non_edge_index = np.zeros((2, 0), dtype=np.int64)
+            non_edge_index = torch.zeros((2, 0), dtype=torch.long)
         else:
             edges = set(g.edges)
-            non_edge_index = np.array(
+            non_edge_index = torch.tensor(
                 [
                     (u, v)
                     for u in range(len(g))
@@ -368,26 +370,33 @@ class MolBuildingEnvContext(GraphBuildingEnvContext):
                         and explicit_valence[u] + 1 <= max_valence[u]
                         and explicit_valence[v] + 1 <= max_valence[v]
                     )
-                ]
+                ],
+                dtype=torch.long,
             )
         data = dict(
             x=x,
             edge_index=edge_index,
             edge_attr=edge_attr,
-            non_edge_index=non_edge_index.astype(np.int64).reshape((-1, 2)).T,
-            stop_mask=np.ones((1, 1)) * (len(g.nodes) > 0),  # Can only stop if there's at least a node
+            non_edge_index=non_edge_index.reshape((-1, 2)).T,
+            stop_mask=torch.ones((1, 1)) * (len(g.nodes) > 0),  # Can only stop if there's at least a node
             add_node_mask=add_node_mask,
             set_node_attr_mask=set_node_attr_mask,
-            add_edge_mask=np.ones((non_edge_index.shape[0], 1)),  # Already filtered by checking for valence
+            add_edge_mask=torch.ones((non_edge_index.shape[0], 1)),  # Already filtered by checking for valence
             set_edge_attr_mask=set_edge_attr_mask,
             remove_node_mask=remove_node_mask,
             remove_node_attr_mask=remove_node_attr_mask,
             remove_edge_mask=remove_edge_mask,
             remove_edge_attr_mask=remove_edge_attr_mask,
         )
-        data = gd.Data(**{k: torch.from_numpy(v) for k, v in data.items()})
+
+        data = gd.Data(**{
+            k: (torch.from_numpy(v) if not torch.is_tensor(v) else v)
+            for k, v in data.items()
+        })
+
         if self.num_rw_feat > 0:
             data.x = torch.cat([data.x, random_walk_probs(data, self.num_rw_feat, skip_odd=True)], 1)
+        g._cached_Data = data
         return data
 
     def collate(self, graphs: List[gd.Data]):

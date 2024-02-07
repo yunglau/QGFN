@@ -122,13 +122,23 @@ class AlgoConfig:
     max_len: int = 128
     max_nodes: int = 128
     max_edges: int = 128
+    input_timestep: bool = False
     illegal_action_logreward: float = -100
     offline_ratio: float = 0.5
     valid_offline_ratio: float = 1
-    train_random_action_prob: float = 0.0
+    train_random_action_prob: float = 0.01
     valid_random_action_prob: float = 0.0
     valid_sample_cond_info: bool = True
     sampling_tau: float = 0.0
+    # QGFN configs 
+    ddqn_update_step: int = 1
+    rl_train_random_action_prob: float = 0.10
+    dqn_tau: float = 0.995
+    p_greedy_sample: bool = False
+    p_of_max_sample: bool = False
+    p_quantile_sample: bool = False
+    p: float = 0.99
+    dqn_n_step: int = 1
     tb: TBConfig = TBConfig()
     moql: MOQLConfig = MOQLConfig()
     a2c: A2CConfig = A2CConfig()

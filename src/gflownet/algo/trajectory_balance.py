@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Dict, List, Tuple
 
 import networkx as nx
 import numpy as np
@@ -140,8 +140,8 @@ class TrajectoryBalance(GFNAlgorithm):
             self._init_subtb(torch.device("cuda"))  # TODO: where are we getting device info?
 
     def create_training_data_from_own_samples(
-        self, model: TrajectoryBalanceModel, n: int, cond_info: Tensor, random_action_prob: float
-    ):
+        self, model: nn.Module, second_model: nn.Module, batch_size: int, cond_info: Tensor, random_action_prob: float = 0.0, p_greedy_sample: bool = False, p_of_max_sample: bool = False, p_quantile_sample: bool = False, scale_temp: bool=False, p: float = 1.0,
+    ) -> List[Dict[str, Tensor]]:
         """Generate trajectories by sampling a model
 
         Parameters
@@ -168,19 +168,13 @@ class TrajectoryBalance(GFNAlgorithm):
         """
         dev = self.ctx.device
         cond_info = cond_info.to(dev)
-        data = self.graph_sampler.sample_from_model(model, n, cond_info, dev, random_action_prob)
+        data = self.graph_sampler.sample_from_model(model, second_model, batch_size, cond_info, dev, random_action_prob, p_greedy_sample, p_of_max_sample, p_quantile_sample, p)
         logZ_pred = model.logZ(cond_info)
-        for i in range(n):
+        for i in range(batch_size):
             data[i]["logZ"] = logZ_pred[i].item()
         return data
 
-    def create_training_data_from_graphs(
-        self,
-        graphs,
-        model: Optional[TrajectoryBalanceModel] = None,
-        cond_info: Optional[Tensor] = None,
-        random_action_prob: Optional[float] = None,
-    ):
+    def create_training_data_from_graphs(self, graphs):
         """Generate trajectories from known endpoints
 
         Parameters

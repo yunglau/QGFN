@@ -100,3 +100,7 @@ class Config:
     replay: ReplayConfig = ReplayConfig()
     task: TasksConfig = TasksConfig()
     cond: ConditionalsConfig = ConditionalsConfig()
+
+    # TODO: this goes elsewhere
+    mellowmax_omega: float = 128
+    second_model_allow_back_and_forth: bool = False

@@ -16,17 +16,12 @@ from torch_scatter import scatter, scatter_max
 
 
 class Graph(nx.Graph):
+    # Subclassing nx.Graph for debugging purposes
     def __str__(self):
         return repr(self)
 
     def __repr__(self):
         return f'<{list(self.nodes)}, {list(self.edges)}, {list(self.nodes[i]["v"] for i in self.nodes)}>'
-
-    def bridges(self):
-        return list(nx.bridges(self))
-
-    def relabel_nodes(self, rmap):
-        return nx.relabel_nodes(self, rmap)
 
 
 def graph_without_edge(g, e):
@@ -51,6 +46,11 @@ def graph_without_edge_attr(g, e, a):
     gp = g.copy()
     del gp.edges[e][a]
     return gp
+
+
+def relabel_graph_and_attrs(g):
+    rmap = dict(zip(g.nodes, range(len(g.nodes))))
+    return nx.relabel_nodes(g, rmap)
 
 
 class GraphActionType(enum.Enum):
@@ -145,7 +145,7 @@ class GraphBuildingEnv:
     def new(self):
         return Graph()
 
-    def step(self, g: Graph, action: GraphAction) -> Graph:
+    def step(self, g: Graph, action: GraphAction, relabel: bool = True) -> Graph:
         """Step forward the given graph state with an action
 
         Parameters
@@ -154,6 +154,8 @@ class GraphBuildingEnv:
             the graph to be modified
         action: GraphAction
             the action taken on the graph, indices must match
+        relabel: bool
+            if True, relabels the new graph so that the node ids are contiguous [0, .., n]
 
         Returns
         -------
@@ -208,6 +210,8 @@ class GraphBuildingEnv:
         elif action.action is GraphActionType.RemoveNode:
             assert g.has_node(action.source)
             gp = graph_without_node(gp, action.source)
+            if relabel:
+                gp = relabel_graph_and_attrs(gp)
         elif action.action is GraphActionType.RemoveNodeAttr:
             assert g.has_node(action.source)
             gp = graph_without_node_attr(gp, action.source, action.attr)
@@ -322,53 +326,37 @@ class GraphBuildingEnv:
     def reverse(self, g: Graph, ga: GraphAction):
         if ga.action == GraphActionType.Stop:
             return ga
-        elif ga.action == GraphActionType.AddNode:
+        if ga.action == GraphActionType.AddNode:
             return GraphAction(GraphActionType.RemoveNode, source=len(g.nodes))
-        elif ga.action == GraphActionType.AddEdge:
+        if ga.action == GraphActionType.AddEdge:
             return GraphAction(GraphActionType.RemoveEdge, source=ga.source, target=ga.target)
-        elif ga.action == GraphActionType.SetNodeAttr:
+        if ga.action == GraphActionType.SetNodeAttr:
             return GraphAction(GraphActionType.RemoveNodeAttr, source=ga.source, attr=ga.attr)
-        elif ga.action == GraphActionType.SetEdgeAttr:
+        if ga.action == GraphActionType.SetEdgeAttr:
             return GraphAction(GraphActionType.RemoveEdgeAttr, source=ga.source, target=ga.target, attr=ga.attr)
-        elif ga.action == GraphActionType.RemoveNode:
-            # TODO: implement neighbors or something?
-            # neighbors = list(g.neighbors(ga.source))
-            # source = 0 if not len(neighbors) else neighbors[0]
-            neighbors = [i for i in g.edges if i[0] == ga.source or i[1] == ga.source]
-            assert len(neighbors) <= 1  # RemoveNode should only be a legal action if the node has one or zero neighbors
-            source = 0 if not len(neighbors) else neighbors[0][0] if neighbors[0][0] != ga.source else neighbors[0][1]
-            return GraphAction(GraphActionType.AddNode, source=source, value=g.nodes[ga.source]["v"])
-        elif ga.action == GraphActionType.RemoveEdge:
-            return GraphAction(GraphActionType.AddEdge, source=ga.source, target=ga.target)
-        elif ga.action == GraphActionType.RemoveNodeAttr:
-            return GraphAction(
-                GraphActionType.SetNodeAttr,
-                source=ga.source,
-                target=ga.target,
-                attr=ga.attr,
-                value=g.nodes[ga.source][ga.attr],
-            )
-        elif ga.action == GraphActionType.RemoveEdgeAttr:
-            return GraphAction(
-                GraphActionType.SetEdgeAttr,
-                source=ga.source,
-                target=ga.target,
-                attr=ga.attr,
-                value=g.edges[ga.source, ga.target][ga.attr],
-            )
-        else:
-            raise ValueError(f"Unknown action type {ga.action}", ga.action)
 
 
 def generate_forward_trajectory(g: Graph, max_nodes: int = None) -> List[Tuple[Graph, GraphAction]]:
-    """Sample (uniformly) a trajectory that generates `g`"""
+    """Sample (uniformly) a trajectory that generates `g`
+
+    Note that g is assumed to be an undirected graph, or to be directed but with special constraints. In particular,
+    this function will remap node ids and may flip edges directions.
+    This remapping includes a special case for directed graphs, where attributes prefixed with 'src_' or 'dst_'
+    are "attached" to the source or destination node of the edge. If the edge is flipped, we remap the attribute to the
+    other node, i.e. 'src_...' becomes 'dst_...'.
+    This assumes that it is ok to regenerate a directed graph with DIFFERENT DIRECTIONS for the
+    edges, which is not always the case. For example if G=(A->B) and the (A, B) edge has a
+    'src_attr'=<something related to A> attribute, then we're assuming that its fine to generate a
+    trajectory that results in (B->A) with the (B, A) edge now having a 'dst_attr'=<something related to A> attribute.
+    This is NOT OK for the general case of generating a directed graph where (A->B) != (B->A)."""
     # TODO: should this be a method of GraphBuildingEnv? handle set_node_attr flags and so on?
     gn = Graph()
     # Choose an arbitrary starting point, add to the stack
-    stack: List[Tuple[int, ...]] = [(np.random.randint(0, len(g.nodes)),)]
+    stack: List[Tuple[int, ...]] = [(np.random.randint(0, len(g.nodes)),)] if len(g) else []
     traj = []
     # This map keeps track of node labels in gn, since we have to start from 0
     relabeling_map: Dict[int, int] = {}
+    original_edges = set(g.edges)
     while len(stack):
         # We pop from the stack until all nodes and edges have been
         # generated and their attributes have been set. Uninserted
@@ -381,17 +369,13 @@ def generate_forward_trajectory(g: Graph, max_nodes: int = None) -> List[Tuple[G
         gt = gn.copy()  # This is a shallow copy
         if len(i) > 1:  # i is an edge
             e = relabeling_map.get(i[0], None), relabeling_map.get(i[1], None)
+            is_this_edge_flipped = i not in original_edges
             if e in gn.edges:
                 # i exists in the new graph, that means some of its attributes need to be added.
-                #
-                # This remap is a special case for the fragment environment, due to the (poor) design
-                # choice of treating directed edges as undirected edges. Until we have routines for
-                # directed graphs, this may need to stay.
-                def possibly_remap(attr):
-                    if attr == f"{i[0]}_attach":
-                        return f"{e[0]}_attach"
-                    elif attr == f"{i[1]}_attach":
-                        return f"{e[1]}_attach"
+
+                def possibly_remap(attr):  # See docstring!
+                    if attr.startswith("src_") or attr.startswith("dst_") and is_this_edge_flipped:
+                        return ["src_", "dst_"][attr.startswith("src_")] + attr[4:]
                     return attr
 
                 attrs = [j for j in g.edges[i] if possibly_remap(j) not in gn.edges[e]]
@@ -461,7 +445,7 @@ class GraphActionCategorical:
         types: List[GraphActionType],
         deduplicate_edge_index=True,
         masks: List[torch.Tensor] = None,
-        slice_dict: Optional[dict[str, torch.Tensor]] = None,
+        slice_dict: Optional[Dict[str, torch.Tensor]] = None,
     ):
         """A multi-type Categorical compatible with generating structured actions.
 
@@ -547,6 +531,7 @@ class GraphActionCategorical:
             slice_dict[k].to(dev) if k is not None else torch.arange(graphs.num_graphs + 1, device=dev) for k in keys
         ]
         self.logprobs = None
+        self.action_probs = None
 
         if deduplicate_edge_index and "edge_index" in keys:
             for idx, k in enumerate(keys):
@@ -604,11 +589,12 @@ class GraphActionCategorical:
             x = [i.detach() for i in x]
         if batch is None:
             batch = self.batch
+
         # First we prefill `out` with the minimum values in case
         # there are no corresponding logits (this can happen if e.g. a
         # graph has no edges), we don't want to accidentally take the
         # max of that type, since we'd get 0.
-        min_val = torch.finfo().min
+        min_val = torch.min(torch.stack([i.min() for i in x if i.numel()]))
         outs = [torch.zeros(self.num_graphs, i.shape[1], device=self.dev) + min_val for i in x]
         maxl = [scatter_max(i, b, dim=0, out=out) for i, b, out in zip(x, batch, outs)]
         if reduce_columns:
@@ -634,6 +620,8 @@ class GraphActionCategorical:
         ).log()
         # log probabilities is log(exp(logit) / Z) = (logit - max) - log(Z')
         self.logprobs = [i - logZ[b, None] for i, b in zip(corr_logits, self.batch)]
+        
+        self.action_probs = [i.exp() for i in self.logprobs]
         return self.logprobs
 
     def logsumexp(self, x=None):
@@ -673,6 +661,19 @@ class GraphActionCategorical:
         gumbel = [logit - (-noise.log()).log() for logit, noise in zip(self.logits, u)]
         # Take the argmax
         return self.argmax(x=gumbel)
+
+    def max(self, x: List[torch.Tensor]):
+        """Taxes the max, i.e. if x are the logprobs, returns the most likely action's probability.
+
+        Parameters
+        ----------
+        x: List[Tensor]
+            Tensors in the same format as the logits (see constructor).
+        Returns
+        -------
+        max: Tensor
+            Tensor of shape `(self.num_graphs,)`, the max of each categorical within the batch."""
+        return self._compute_batchwise_max(x, batch=self.batch, reduce_columns=True)
 
     def argmax(
         self,

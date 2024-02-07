@@ -1,5 +1,6 @@
 from collections import defaultdict
 from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import rdkit.Chem as Chem
@@ -175,7 +176,7 @@ class FragMolBuildingEnvContext(GraphBuildingEnvContext):
                 col = 1
         return (type_idx, int(row), int(col))
 
-    def graph_to_Data(self, g: Graph) -> gd.Data:
+    def graph_to_Data(self, g: Graph, t: Optional[int] = None) -> gd.Data:
         """Convert a networkx Graph to a torch geometric Data instance
         Parameters
         ----------
@@ -187,21 +188,20 @@ class FragMolBuildingEnvContext(GraphBuildingEnvContext):
         data:  gd.Data
             The corresponding torch_geometric object.
         """
-        zeros = lambda x: np.zeros(x, dtype=np.float32)  # noqa: E731
-        x = zeros((max(1, len(g.nodes)), self.num_node_dim))
+        x = torch.zeros((max(1, len(g.nodes)), self.num_node_dim))
         x[0, -1] = len(g.nodes) == 0
-        edge_attr = zeros((len(g.edges) * 2, self.num_edge_dim))
-        set_edge_attr_mask = zeros((len(g.edges), self.num_edge_attr_logits))
+        edge_attr = torch.zeros((len(g.edges) * 2, self.num_edge_dim))
+        set_edge_attr_mask = torch.zeros((len(g.edges), self.num_edge_attr_logits))
         # TODO: This is a bit silly but we have to do +1 when the graph is empty because the default
         # padding action is a [0, 0, 0], which needs to be legal for the empty state. Should be
         # fixable with a bit of smarts & refactoring.
-        remove_node_mask = zeros((x.shape[0], 1)) + (1 if len(g) == 0 else 0)
-        remove_edge_attr_mask = zeros((len(g.edges), self.num_edge_attrs))
+        remove_node_mask = torch.zeros((x.shape[0], 1)) + (1 if len(g) == 0 else 0)
+        remove_edge_attr_mask = torch.zeros((len(g.edges), self.num_edge_attrs))
         if len(g):
-            degrees = np.array(list(g.degree), dtype=np.int32)[:, 1]  # type: ignore
-            max_degrees = np.array([len(self.frags_stems[g.nodes[n]["v"]]) for n in g.nodes])  # type: ignore
+            degrees = torch.tensor(list(g.degree))[:, 1]
+            max_degrees = torch.tensor([len(self.frags_stems[g.nodes[n]["v"]]) for n in g.nodes])
         else:
-            degrees = max_degrees = np.zeros((0,), dtype=np.int32)
+            degrees = max_degrees = torch.zeros((0,))
         for i, n in enumerate(g.nodes):
             x[i, g.nodes[n]["v"]] = 1
             # The node must be connected to at most 1 other node and in the case where it is
@@ -245,32 +245,25 @@ class FragMolBuildingEnvContext(GraphBuildingEnvContext):
                         if attach_point not in attached[n]:
                             set_edge_attr_mask[i, attach_point + self.num_stem_acts * j] = 1
         # Since this is a DiGraph, make sure to put (i, j) first and (j, i) second
-        edge_index = np.array([e for i, j in g.edges for e in [(i, j), (j, i)]], dtype=np.int64).reshape((-1, 2)).T
+        edge_index = (
+            torch.tensor([e for i, j in g.edges for e in [(i, j), (j, i)]], dtype=torch.long).reshape((-1, 2)).T
+        )
         if x.shape[0] == self.max_frags:
-            add_node_mask = zeros((x.shape[0], self.num_new_node_values))
+            add_node_mask = torch.zeros((x.shape[0], self.num_new_node_values))
         else:
-            add_node_mask = (
-                np.array(degrees < max_degrees, dtype=np.float32)[:, None]
-                if len(g.nodes)
-                else np.ones((1, 1), np.float32)
-            )
-            add_node_mask = add_node_mask * np.ones((x.shape[0], self.num_new_node_values), np.float32)
-        stop_mask = zeros((1, 1)) if has_unfilled_attach or not len(g) else np.ones((1, 1), np.float32)
+            add_node_mask = (degrees < max_degrees).float()[:, None] if len(g.nodes) else torch.ones((1, 1))
+            add_node_mask = add_node_mask * torch.ones((x.shape[0], self.num_new_node_values))
+        stop_mask = torch.zeros((1, 1)) if has_unfilled_attach or not len(g) or t == 0 else torch.ones((1, 1))
 
         return gd.Data(
-            **{
-                k: torch.from_numpy(v)
-                for k, v in dict(
-                    x=x,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    stop_mask=stop_mask,
-                    add_node_mask=add_node_mask,
-                    set_edge_attr_mask=set_edge_attr_mask,
-                    remove_node_mask=remove_node_mask,
-                    remove_edge_attr_mask=remove_edge_attr_mask,
-                ).items()
-            }
+            x,
+            edge_index,
+            edge_attr,
+            stop_mask=stop_mask,
+            add_node_mask=add_node_mask,
+            set_edge_attr_mask=set_edge_attr_mask,
+            remove_node_mask=remove_node_mask,
+            remove_edge_attr_mask=remove_edge_attr_mask,
         )
 
     def collate(self, graphs: List[gd.Data]) -> gd.Batch:
