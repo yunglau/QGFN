@@ -91,6 +91,8 @@ class MixtureOnlineTrainer(StandardOnlineTrainer):
             p_of_max_sample=self.cfg.algo.p_of_max_sample,
             p_quantile_sample=self.cfg.algo.p_quantile_sample,
             p=self.cfg.algo.p,
+            scheduler_type=self.cfg.algo.scheduler_type,
+            scheduler_step=self.cfg.algo.scheduler_step,
             hindsight_ratio=self.cfg.replay.hindsight_ratio,  # remove?
             illegal_action_logrewards=(
                 self.cfg.algo.illegal_action_logreward,

@@ -94,6 +94,8 @@ class MixIterator(IterableDataset):
         p_of_max_sample: bool = False,
         p_quantile_sample: bool = False,
         p: float = 1.0,
+        scheduler_type: str = 'cosine_annealing',
+        scheduler_step: int = 1500,
         ddqn_update_step: int = 1,
         hindsight_ratio: float = 0.0,
         sample_cond_info: bool = True,
@@ -162,7 +164,8 @@ class MixIterator(IterableDataset):
         self.illegal_action_logrewards = illegal_action_logrewards
         self.seed_second_trajs_with_firsts = False  # Disabled for now
         self.ddqn_update_step = ddqn_update_step
-        self.scheduler_type = 'cosine_annealing'
+        self.scheduler_type = scheduler_type
+        self.scheduler_step = scheduler_step
 
         # This SamplingIterator instance will be copied by torch DataLoaders for each worker, so we
         # don't want to initialize per-worker things just yet, such as where the log the worker writes
@@ -201,7 +204,7 @@ class MixIterator(IterableDataset):
                 self.train_it
             )
 
-            p = scheduler(self.scheduler_type, self.p, self.train_it, 500)
+            p = scheduler(self.scheduler_type, self.p, self.train_it, self.scheduler_step)
             if self.p_greedy_sample: 
                 p = 1 - p
                 

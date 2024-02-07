@@ -139,6 +139,8 @@ class AlgoConfig:
     p_quantile_sample: bool = False
     p: float = 0.99
     dqn_n_step: int = 1
+    scheduler_type: str = 'cosine_annealing'
+    scheduler_step: int = 1500
     tb: TBConfig = TBConfig()
     moql: MOQLConfig = MOQLConfig()
     a2c: A2CConfig = A2CConfig()

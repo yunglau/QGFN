@@ -51,6 +51,8 @@ class QM9MixtureModelTrainer(MixtureOnlineTrainer):
         cfg.algo.p_greedy_sample = False
         cfg.algo.p_of_max_sample = False
         cfg.algo.p_quantile_sample = False
+        cfg.algo.scheduler_type='cosine_annealing'
+        cfg.algo.scheduler_step=1500
         cfg.algo.p = 0.99
         cfg.algo.ddqn_update_step = 1
         cfg.algo.valid_random_action_prob = 0.0

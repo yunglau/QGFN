@@ -58,6 +58,8 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
         cfg.algo.p_of_max_sample = False
         cfg.algo.p_quantile_sample = False
         cfg.algo.p = 0.99
+        cfg.algo.scheduler_type = 'cosine_annealing'
+        cfg.algo.scheduler_step = 1500
         cfg.algo.ddqn_update_step = 1
         cfg.algo.valid_random_action_prob = 0.0
         cfg.algo.valid_offline_ratio = 0
@@ -123,27 +125,10 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
         
     def setup_model(self):
         super().setup_model()
-        # to be changed: number of shared layers 
-        share_weight = False 
-        num_shared_layers = 0
-        if num_shared_layers:
-            self.second_model = GraphTransformerGFN(
-                self.ctx,
-                self.cfg,
-                shared_num_layers=num_shared_layers,
-                shared_layers=self.shared_layers
-            )
-        elif share_weight:
-            self.second_model = GraphTransformerGFN(
-                self.second_ctx,
-                self.cfg,
-                shared_transf=self.shared_graph_transformer
-            )
-        else: 
-            self.second_model = GraphTransformerGFN(
-                self.second_ctx,
-                self.cfg, 
-            ) 
+        self.second_model = GraphTransformerGFN(
+            self.second_ctx,
+            self.cfg, 
+        ) 
         
         self._get_additional_parameters = lambda: list(self.second_model.parameters())
         # # Maybe only do this if we are using DDQN?

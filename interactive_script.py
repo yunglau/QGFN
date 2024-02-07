@@ -18,6 +18,8 @@ base_hps = {
         'p_greedy_sample': True,
         'p_of_max_sample': False,
         'p_quantile_sample': False,
+        'scheduler_step': 500,
+        'scheduler_type': 'cosine_annealing',
         'p': 0.4,
         'dqn_n_step': 25,
         'sampling_tau': 0.99,

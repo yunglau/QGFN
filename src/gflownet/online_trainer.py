@@ -1,6 +1,7 @@
 import copy
 import os
 import pathlib
+from itertools import chain
 
 import git
 import torch
@@ -55,13 +56,23 @@ class StandardOnlineTrainer(GFNTrainer):
         else:
             Z_params = []
             non_Z_params = list(self.model.parameters())
-        self.opt = torch.optim.Adam(
-            non_Z_params,
-            self.cfg.opt.learning_rate,
-            (self.cfg.opt.momentum, 0.999),
-            weight_decay=self.cfg.opt.weight_decay,
-            eps=self.cfg.opt.adam_eps,
-        )
+        
+        if self.cfg.algo.p_greedy_sample or self.cfg.algo.p_of_max_sample or self.cfg.algo.p_greedy_sample:
+            self.opt = torch.optim.Adam(
+                chain(non_Z_params, self._get_additional_parameters()),
+                self.cfg.opt.learning_rate,
+                (self.cfg.opt.momentum, 0.999),
+                weight_decay=self.cfg.opt.weight_decay,
+                eps=self.cfg.opt.adam_eps,
+            )
+        else: 
+            self.opt = torch.optim.Adam(
+                non_Z_params,
+                self.cfg.opt.learning_rate,
+                (self.cfg.opt.momentum, 0.999),
+                weight_decay=self.cfg.opt.weight_decay,
+                eps=self.cfg.opt.adam_eps,
+            )
         self.opt_Z = torch.optim.Adam(Z_params, self.cfg.algo.tb.Z_learning_rate, (0.9, 0.999))
         self.lr_sched = torch.optim.lr_scheduler.LambdaLR(self.opt, lambda steps: 2 ** (-steps / self.cfg.opt.lr_decay))
         self.lr_sched_Z = torch.optim.lr_scheduler.LambdaLR(
