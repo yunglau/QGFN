@@ -8,24 +8,24 @@ base_hps = {
     'log_dir': log_root,
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     'overwrite_existing_exp': True,
-    'num_training_steps': 1000,
+    'num_training_steps': 10000,
     'validate_every': 0,
-    'num_workers': 8,
+    'num_workers': 0,
     'opt': {
-        'lr_decay': 2000
+        'lr_decay': 20000
     },
     'algo': {
-        'p_greedy_sample': True,
+        'p_greedy_sample': False,
         'p_of_max_sample': False,
-        'p_quantile_sample': False,
-        'scheduler_step': 500,
+        'p_quantile_sample': True,
+        'scheduler_step': 1500,
         'scheduler_type': 'cosine_annealing',
-        'p': 0.4,
+        'p': 0.8,
         'dqn_n_step': 25,
         'sampling_tau': 0.99,
         'global_batch_size': 64,
         'ddqn_update_step': 1,
-        'rl_train_random_action_prob': 0.1,
+        'rl_train_random_action_prob': 0.01,
         'dqn_tau': 0.9
     },
     'cond': {

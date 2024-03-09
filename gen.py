@@ -30,17 +30,17 @@ BASE_HPS: Config = {
         }
     },
     "algo": {
-        "p_greedy_sample": True,
+        "p_greedy_sample": False,
         "p_of_max_sample": False,
-        "p_quantile_sample": False,
-        "p": 0.6,
-        "dqn_n_step": 30,   # all trajectories have length 30
-        "sampling_tau": 0.6,
+        "p_quantile_sample": True,
+        "p": 0.8,
+        "dqn_n_step": 25,   
+        "sampling_tau": 0.99,
         "global_batch_size": 16,
         "ddqn_update_step": 1,
         "train_random_action_prob": 5e-4,
         "rl_train_random_action_prob": 5e-4,
-        "dqn_tau": 0.9,
+        "dqn_tau": 0.95,
         "tb": { "variant": "TB" },
     },
     "task": {
