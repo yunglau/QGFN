@@ -10,7 +10,7 @@ Our codebase builds on top of a fork of the public [recursion gflownet](https://
     - [`p-of-max`](src/gflownet/algo/graph_sampling.py#L202)
     - [`p-quantile`](src/gflownet/algo/graph_sampling.py#L172)
 - [src/gflownet/data/mix_iterator.py](src/gflownet/data/mix_iterator.py) constructs batches of data for training, handles rewards, and logs summary statistics about the sampled trajectories
-- [src/gflownet/tasks/](gflownet/src/gflownet/tasks) is a directory that contains the runnable trainer files for the various tasks on which we validate our method
+- [src/gflownet/tasks/](src/gflownet/tasks) is a directory that contains the runnable trainer files for the various tasks on which we validate our method
 
 ## Setup
 To setup the project, run the following commands to install the required base packages:
