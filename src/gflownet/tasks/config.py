@@ -55,10 +55,18 @@ class SEHMOOTaskConfig:
 class QM9TaskConfig:
     h5_path: str = "./data/qm9/qm9.h5"  # see src/gflownet/data/qm9.py
     model_path: str = "./data/qm9/qm9_model.pt"
-
+    
 
 @dataclass
+class BitSeqTaskConfig:
+    modes_path: str = "./data/bitseq/modes.pkl"
+    variant: str = "autoregressive" # "autoregressive" or "prepend-append"
+    k: int = 4
+    
+    
+@dataclass
 class TasksConfig:
+    bitseq: BitSeqTaskConfig = BitSeqTaskConfig()
     qm9: QM9TaskConfig = QM9TaskConfig()
     seh: SEHTaskConfig = SEHTaskConfig()
     seh_moo: SEHMOOTaskConfig = SEHMOOTaskConfig()

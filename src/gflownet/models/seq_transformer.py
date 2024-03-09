@@ -36,30 +36,42 @@ class SeqTransformerGFN(nn.Module):
         env_ctx,
         cfg: Config,
         num_state_out=1,
+        min_len=0,
+        variant="autoregressive",
     ):
         super().__init__()
         self.ctx = env_ctx
+        self.min_len = min_len
+        self.variant = variant
         self.num_state_out = num_state_out
         num_hid = cfg.model.num_emb
         num_outs = env_ctx.num_actions + num_state_out
         mc = cfg.model
+
+        assert variant in ["prepend-append", "autoregressive"], (
+            "variant must be one of 'prepend-append', 'autoregressive'"
+        )
+
         if mc.seq_transformer.posenc == SeqPosEnc.Pos:
             self.pos = PositionalEncoding(num_hid, dropout=cfg.model.dropout, max_len=cfg.algo.max_len + 2)
         elif mc.seq_transformer.posenc == SeqPosEnc.Rotary:
             self.pos = RotaryEmbedding(num_hid)
+
         self.use_cond = env_ctx.num_cond_dim > 0
         self.embedding = nn.Embedding(env_ctx.num_tokens, num_hid)
         encoder_layers = nn.TransformerEncoderLayer(num_hid, mc.seq_transformer.num_heads, num_hid, dropout=mc.dropout)
         self.encoder = nn.TransformerEncoder(encoder_layers, mc.num_layers)
         self.logZ = nn.Linear(env_ctx.num_cond_dim, 1)
+
         if self.use_cond:
             self.output = MLPWithDropout(num_hid + num_hid, num_outs, [4 * num_hid, 4 * num_hid], mc.dropout)
             self.cond_embed = nn.Linear(env_ctx.num_cond_dim, num_hid)
         else:
             self.output = MLPWithDropout(num_hid, num_outs, [2 * num_hid, 2 * num_hid], mc.dropout)
+
         self.num_hid = num_hid
 
-    def forward(self, xs: SeqBatch, cond, batched=False):
+    def forward(self, xs: SeqBatch, cond, batched=False, temp_cond=False):
         """Returns a GraphActionCategorical and a tensor of state predictions.
 
         Parameters
@@ -71,7 +83,14 @@ class SeqTransformerGFN(nn.Module):
         batched: bool
             If True, the it's assumed that the cond tensor is constant along a sequence, and the output is given
             at each timestep (of the autoregressive process), which works because we are using causal self-attenion.
-            If False, only the last timesteps' output is returned, which one would use to sample the next token."""
+            If False, only the last timesteps' output is returned, which one would use to sample the next token.
+        temp_cond: bool
+            TODO: add support for temperature conditioning of action logits?"""
+
+        assert not (batched and self.variant == "prepend-append"), (
+            "batched mode not supported for prepend-append variant"
+        )
+
         x = self.embedding(xs.x)
         x = self.pos(x)  # (time, batch, nemb)
         x = self.encoder(x, src_key_padding_mask=xs.mask, mask=generate_square_subsequent_mask(x.shape[0]).to(x.device))
@@ -96,7 +115,13 @@ class SeqTransformerGFN(nn.Module):
             add_node_logits = out[xs.logit_idx, ns + 1 :]  # (proper_time, nout - 1)
             # `time` above is really max_time, whereas proper_time = sum(len(traj) for traj in xs))
             # which is what we need to give to GraphActionCategorical
-        else:
+            stop_mask = torch.ones_like(stop_logits)
+            if self.min_len > 0:
+                # The +1 accounts for the BOS token
+                stop_mask = torch.cat([torch.arange(1, i + 1) >= self.min_len for i in xs.lens])
+                stop_mask = stop_mask.to(stop_logits.device).float().unsqueeze(-1)
+                stop_logits = stop_logits * stop_mask - 1000 * (1 - stop_mask)
+        elif self.variant == "autoregressive":
             # The default num_graphs is computed for the batched case, so we need to fix it here so that
             # GraphActionCategorical knows how many "graphs" (sequence inputs) there are
             xs.num_graphs = out.shape[0]
@@ -104,13 +129,39 @@ class SeqTransformerGFN(nn.Module):
             state_preds = out[:, 0:ns]
             stop_logits = out[:, ns : ns + 1]
             add_node_logits = out[:, ns + 1 :]
+            stop_mask = torch.ones_like(stop_logits)
+            if self.min_len > 0:
+                # The +1 accounts for the BOS token
+                stop_mask = stop_mask * (xs.lens >= self.min_len + 1).unsqueeze(-1).float()
+                stop_logits = stop_logits * stop_mask - 1000 * (1 - stop_mask)
+        else:
+            assert self.variant == "prepend-append"
+            xs.num_graphs = out.shape[0]
+            state_preds = out[:, 0:ns]
+            stop_logits = out[:, ns : ns + 1]
+            add_node_logits = out[:, ns + 1 : ns + 1 + len(self.ctx.alphabet)]
+            add_edge_logits = out[:, ns + 1 + len(self.ctx.alphabet) :]
+            stop_mask = torch.ones_like(stop_logits)
+            if self.min_len > 0:
+                stop_mask = stop_mask * (xs.lens >= self.min_len + 1).unsqueeze(-1).float()
+                stop_logits = stop_logits * stop_mask - 1000 * (1 - stop_mask)
+
+        logits = [stop_logits, add_node_logits]
+        keys = [None, None]
+        masks = [stop_mask, torch.ones_like(add_node_logits)]
+
+        if self.variant == "prepend-append":
+            logits.append(add_edge_logits)
+            keys.append(None)
+            masks.append(torch.ones_like(add_edge_logits))
 
         return (
             GraphActionCategorical(
                 xs,
-                logits=[stop_logits, add_node_logits],
-                keys=[None, None],
+                logits=logits,
+                keys=keys,
                 types=self.ctx.action_type_order,
+                masks=masks,
                 slice_dict={},
             ),
             state_preds,

@@ -119,6 +119,7 @@ class AlgoConfig:
 
     method: str = "TB"
     global_batch_size: int = 64
+    min_len: int = 0
     max_len: int = 128
     max_nodes: int = 128
     max_edges: int = 128
