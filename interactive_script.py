@@ -1,6 +1,7 @@
 import torch
 from gflownet.tasks.seh_double import SEHDoubleModelTrainer
 # from gflownet.tasks.qm9.qm9_double import QM9MixtureModelTrainer
+from gflownet.tasks.bitseq.bitseq_mix import BitSeqMixTrainer
 
 log_root = '../jobs/test'
 
@@ -15,13 +16,13 @@ base_hps = {
         'lr_decay': 20000
     },
     'algo': {
-        'p_greedy_sample': False,
+        'p_greedy_sample': True,
         'p_of_max_sample': False,
-        'p_quantile_sample': True,
+        'p_quantile_sample': False,
         'scheduler_step': 1500,
         'scheduler_type': 'cosine_annealing',
-        'p': 0.8,
-        'dqn_n_step': 25,
+        'p': 0.4,
+        'dqn_n_step': 30,
         'sampling_tau': 0.99,
         'global_batch_size': 64,
         'ddqn_update_step': 1,
@@ -31,7 +32,7 @@ base_hps = {
     'cond': {
         'temperature': {
             'sample_dist': 'constant',
-            'dist_params': [32.0],
+            'dist_params': [3.0],
             'num_thermometer_dim': 32,
         }
     },
@@ -40,15 +41,20 @@ base_hps = {
         'capacity': 100,
         'warmup': 0,
     },
-    'task': {
-        'qm9': {
-            'h5_path': 'path.to.dataset/qm9.h5',
-            'model_path': 'path.to.model/mxmnet_gap_model.pt'
+    "task": {
+        "qm9": {
+            "h5_path": "path.to.dataset/qm9.h5",
+            "model_path": "path.to.model/mxmnet_gap_model.pt"
+        },
+        "bitseq": {
+            "variant": "prepend-append", # "autoregressive" or "prepend-append"
+            "modes_path": "data/modes.pkl",
+            "k": 4,
         }
     }
 }
 
-trial = SEHDoubleModelTrainer(base_hps)
+trial = BitSeqMixTrainer(base_hps)
 trial.print_every = 1
 trial.run()
 

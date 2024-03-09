@@ -50,7 +50,7 @@ BASE_HPS: Config = {
         },
         "bitseq": {
             "variant": "prepend-append",
-            "modes_path": "path.to.ref.sequences/modes.pkl",
+            "modes_path": "data/modes.pkl",
             "k": 4,
         }
     }
