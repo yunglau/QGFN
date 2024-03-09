@@ -7,7 +7,6 @@ import pathlib
 
 import torch
 from typing import Any, Dict
-
 from gflownet.data.mix_iterator import BatchTuple, MixIterator
 from gflownet.models.graph_transformer import GraphTransformerGFN
 from gflownet.models.seq_transformer import SeqTransformerGFN

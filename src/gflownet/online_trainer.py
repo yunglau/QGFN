@@ -57,7 +57,7 @@ class StandardOnlineTrainer(GFNTrainer):
             Z_params = []
             non_Z_params = list(self.model.parameters())
         
-        if self.cfg.algo.p_greedy_sample or self.cfg.algo.p_of_max_sample or self.cfg.algo.p_greedy_sample:
+        if self.cfg.algo.p_greedy_sample or self.cfg.algo.p_of_max_sample or self.cfg.algo.p_quantile_sample:
             self.opt = torch.optim.Adam(
                 chain(non_Z_params, self._get_additional_parameters()),
                 self.cfg.opt.learning_rate,
