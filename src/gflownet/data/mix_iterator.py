@@ -198,6 +198,8 @@ class MixIterator(IterableDataset):
             self.log_path = f"{self.log_dir}/generated_mols_{self._wid}.db"
             self.log.connect(self.log_path)
 
+        self.batch_size = 1024
+        
         while True:
             cond_info = self.first_task.sample_conditional_information(
                 self.batch_size,
@@ -211,16 +213,46 @@ class MixIterator(IterableDataset):
             with torch.no_grad():                    
                 first_trajs = self.first_algo.create_training_data_from_own_samples(
                     self.first_model,
-                    self.second_model,
-                    self.batch_size,
+                    1024,
                     cond_info["encoding"],
                     random_action_prob=self.random_action_prob,
-                    p_greedy_sample=self.p_greedy_sample,
-                    p_of_max_sample=self.p_of_max_sample,
-                    p_quantile_sample=self.p_quantile_sample,
-                    p=p
                 )
                 
+                # CHANGES: 
+                def safe(f, a, default):
+                    try:
+                        return f(a)
+                    except Exception:
+                        return default
+                results = [safe(self.ctx.graph_to_mol, i["result"], None) for i in first_trajs]
+                pred_reward, is_valid = self.first_task.compute_flat_rewards(results)
+                flat_rewards = list(pred_reward)
+                # Compute scalar rewards from conditional information & flat rewards
+                flat_rewards = torch.stack(flat_rewards)
+                log_rewards = self.first_task.cond_info_to_logreward(cond_info, flat_rewards)
+                
+                for i in range(len(first_trajs)): 
+                    trajectory = first_trajs[i]['traj']
+                    for t in range(len(trajectory) - 1):
+                        # trajs: List[Tuple[Graph, GraphAction]]
+                        state = trajectory[t][0]
+                        action = trajectory[t][1]
+                        bck_logprobs = first_trajs[i]['bck_logprobs'][t].cpu()
+                        next_state = trajectory[t+1][0]  # since the next state in trajectory[t] is the state in trajectory[t+1]
+                        done = 0 if t < len(trajectory) - 2 else 1  # flag to check if it's the last transition in the trajectory
+                        if done:
+                            reward = log_rewards[i]
+                        else: 
+                            reward  = bck_logprobs
+                        valid_traj = is_valid[i]
+                        
+                        self.replay_buffer.push(state, action, reward, next_state, done, valid_traj)
+                    
+                # should return sets of (state, action, reward, next_state, done)
+                traj_transitions, idxs = self.replay_buffer.sample(1024)
+                # print("traj_transitions")
+                # print(traj_transitions)
+  
             all_trajs = first_trajs
             
             valid_idcs = torch.tensor(
@@ -272,7 +304,7 @@ class MixIterator(IterableDataset):
             for hook in self.log_hooks:
                 raise NotImplementedError()
 
-            batch_partial_traj = all_trajs
+            batch_partial_traj = traj_transitions
             batch_first_encoding = cond_info["encoding"]
             first_log_rewards
             
@@ -280,15 +312,16 @@ class MixIterator(IterableDataset):
             batch_second_partial_traj = all_trajs
             batch_second_encoding = cond_info["encoding"]
             second_log_rewards 
-                
+            
             # Construct batch
             # batch = self.first_algo.construct_batch(all_trajs, torch.cat((cond_info["encoding"], cond_info_sliced["encoding"]), dim=0), first_log_rewards)
-            batch = self.first_algo.construct_batch(
-                batch_partial_traj, batch_first_encoding, first_log_rewards
+            batch = self.first_algo.construct_batch_transitions(
+                batch_partial_traj, batch_first_encoding, idxs
             )
             batch.num_online = len(batch_partial_traj)
             batch.num_offline = 0
             batch.flat_rewards = flat_rewards
+            
             second_batch = self.second_algo.construct_batch(
                             batch_second_partial_traj, batch_second_encoding, second_log_rewards
             )
@@ -303,6 +336,8 @@ class MixIterator(IterableDataset):
                 "first_avg_len": sum([len(i["traj"]) for i in first_trajs]) / len(first_trajs),
                 "self.p": p,
             }
+            
+            print(bt)
 
             yield bt
 

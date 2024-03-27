@@ -240,7 +240,7 @@ class GFNTrainer:
             batch_size=None,
             num_workers=self.cfg.num_workers,
             persistent_workers=self.cfg.num_workers > 0,
-            prefetch_factor=1 if self.cfg.num_workers else 2,
+            # prefetch_factor=1 if self.cfg.num_workers else 2,
         )
 
     def build_final_data_loader(self) -> DataLoader:

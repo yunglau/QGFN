@@ -176,13 +176,16 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
             persistent_workers=self.cfg.num_workers > 0,
             # The 2 here is an odd quirk of torch 1.10, it is fixed and
             # replaced by None in torch 2.
-            prefetch_factor=1 if self.cfg.num_workers else 2,
-            # prefetch_factor=None
+            # prefetch_factor=1 if self.cfg.num_workers else 2,
+            prefetch_factor=None
         )
 
     def train_batch(self, batch: BatchTuple, epoch_idx: int, batch_idx: int, train_it: int) -> Dict[str, Any]:
         gfn_batch, second_batch = batch
-        loss, info = self.algo.compute_batch_losses(self.model, gfn_batch)
+        # print(gfn_batch)
+        loss, info, td_error = self.algo.compute_batch_losses(self.model, self.sampling_model, gfn_batch)
+        # Update replay buffer priorities 
+        replay_buffer = self.replay_buffer.update_priorities(gfn_batch.idxs, td_error)
         sloss, sinfo = self.second_algo.compute_batch_losses(self.second_model, second_batch, self.second_model_lagged, temp_cond=False)
         self.step(loss + sloss, train_it)  # TODO: clip second model gradients?
         info.update({f"sec_{k}": v for k, v in sinfo.items()})

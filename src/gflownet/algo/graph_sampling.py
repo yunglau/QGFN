@@ -62,15 +62,10 @@ class GraphSampler:
     def sample_from_model(
         self,
         model: nn.Module,
-        second_model: nn.Module,
         n: int,
         cond_info: Tensor,
         dev: torch.device,
         random_action_prob: float = 0.0,
-        p_greedy_sample: bool = False, 
-        p_of_max_sample: bool = False,
-        p_quantile_sample: bool = False,
-        p: float = 0.0,
         starts: Optional[List[Graph]] = None,
     ):
         """Samples a model in a minibatch
@@ -133,6 +128,8 @@ class GraphSampler:
                 remaining = torch.tensor([remaining], device=dev).repeat(ci.shape[0])
                 ci = torch.cat([ci, thermometer(remaining, 32)], dim=1)
                 
+            p_greedy_sample, p_of_max_sample, p_quantile_sample = False, False, False
+            
             
             assert not (p_greedy_sample and p_of_max_sample), "Cannot sample both p_greedy_sample and p_of_max_sample"
             assert not (p_greedy_sample and p_quantile_sample), "Cannot sample both p_greedy_sample and p_quantile_sample"
