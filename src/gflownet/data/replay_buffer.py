@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from gflownet.config import Config
-
+import random
 
 class ReplayBuffer(object):
     def __init__(self, cfg: Config, rng: np.random.Generator = None):
@@ -43,12 +43,20 @@ class ReplayBuffer(object):
             
             # Add the new experience
             self.buffer.append(args)
-            self.priorities.append(priority)
+            self.priorities.append(0)
             # self.buffer = sorted(self.buffer, key = lambda rew: rew[2])[-self.capacity:] #Adding the traj to the buffer and sorting the buffer based on the traj reward
 
     def sample(self, batch_size):
-        idxs = self.rng.choice(len(self.buffer), batch_size)
-        out = list(zip(*[self.buffer[idx] for idx in idxs]))
+        # Sampling based on priorities
+        total_priority = sum(self.priorities)
+        if total_priority != 0: 
+            probs = [p / total_priority for p in self.priorities]
+            indices = random.choices(range(len(self.buffer)), weights=probs, k=batch_size)
+            out = list(zip(*[self.buffer[idx] for idx in indices]))
+        else:
+            indices = self.rng.choice(len(self.buffer), batch_size)
+            out = list(zip(*[self.buffer[idx] for idx in indices]))
+            
         for i in range(len(out)):
             # stack if all elements are numpy arrays or torch tensors
             # (this is much more efficient to send arrays through multiprocessing queues)
@@ -56,7 +64,7 @@ class ReplayBuffer(object):
                 out[i] = np.stack(out[i], axis=0)
             elif all([isinstance(x, torch.Tensor) for x in out[i]]):
                 out[i] = torch.stack(out[i], dim=0)
-        return tuple(out), idxs
+        return tuple(out), indices
     
     def update_priorities(self, indices, priorities):
         """Updates the priorities of specific experiences."""

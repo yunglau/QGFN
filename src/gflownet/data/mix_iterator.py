@@ -218,6 +218,7 @@ class MixIterator(IterableDataset):
                     random_action_prob=self.random_action_prob,
                 )
                 
+                
                 # CHANGES: 
                 def safe(f, a, default):
                     try:
@@ -231,7 +232,7 @@ class MixIterator(IterableDataset):
                 flat_rewards = torch.stack(flat_rewards)
                 log_rewards = self.first_task.cond_info_to_logreward(cond_info, flat_rewards)
                 
-                for i in range(len(first_trajs)): 
+                for i in range(len(first_trajs[:64])): 
                     trajectory = first_trajs[i]['traj']
                     for t in range(len(trajectory) - 1):
                         # trajs: List[Tuple[Graph, GraphAction]]
@@ -337,7 +338,7 @@ class MixIterator(IterableDataset):
                 "self.p": p,
             }
             
-            print(bt)
+            # print(bt)
 
             yield bt
 
@@ -409,8 +410,8 @@ class MixIterator(IterableDataset):
 
         if gfn:
             self.log.insert_many(data, data_labels)
-        else: 
-            self.log_rl.insert_many(data, data_labels)
+        # else: 
+        #     self.log_rl.insert_many(data, data_labels)
 
 
 class SQLiteLog:

@@ -215,15 +215,12 @@ class Munchausen_DQN:
         
         # Now we are computing the third term 
         # Compute the log probabilities of the actions using the policy logits
-        log_target_policy = Q_target_st.logsoftmax()
-        
-        # Compute the Munchausen term using the log probabilities of the taken actions
-        munchausen_term = [self.alpha * logprob for logprob in log_target_policy]
+        munchausen_term = (1/(1-0.15)) * Q_target_st.log_prob(batch.actions, logprobs=Q.logits)
         
         # Clamp the Munchausen term to a specified range
-        # munchausen_penalty = torch.clamp(munchausen_term, min=torch.tensor(-2500), max=torch.tensor(1))
+        munchausen_penalty = 0.15 * torch.clamp(munchausen_term, min=torch.tensor(-2500).to('cuda'), max=torch.tensor(1).to('cuda'))
         
-        hat_Q = mdp_rewards + second_term 
+        hat_Q = mdp_rewards + second_term + munchausen_term
         
         losses = nn.functional.huber_loss(Q_sa, hat_Q, reduction="none")
         
