@@ -182,8 +182,8 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
             persistent_workers=self.cfg.num_workers > 0,
             # The 2 here is an odd quirk of torch 1.10, it is fixed and
             # replaced by None in torch 2.
-            prefetch_factor=1 if self.cfg.num_workers else 2,
-            # prefetch_factor=None
+            # prefetch_factor=1 if self.cfg.num_workers else 2,
+            prefetch_factor=None
         )
 
     def train_batch(self, batch: BatchTuple, epoch_idx: int, batch_idx: int, train_it: int) -> Dict[str, Any]:
