@@ -5,12 +5,12 @@ This repository contains the code to run the experiments and visualize the resul
 
 ## Overview
 Our codebase builds on top of a fork of the public [recursion gflownet](https://github.com/recursionpharma/gflownet) repo which provides the environment setup to run the gflownet framework on graph domains. Our main edits to the forked repo are found in the following files
-- [src/gflownet/algo/graph_sampling.py](gflownet/src/gflownet/algo/graph_sampling.py) handles the logit mixing between the gflownet policy with the learned Q value estimates. Here are permalinks to the implementations of the 3 flavours of qgfn mixing:
+- [src/gflownet/algo/graph_sampling.py](src/gflownet/algo/graph_sampling.py) handles the logit mixing between the gflownet policy with the learned Q value estimates. Here are permalinks to the implementations of the 3 flavours of qgfn mixing:
     - [`p-greedy`](src/gflownet/algo/graph_sampling.py#L148)
     - [`p-of-max`](src/gflownet/algo/graph_sampling.py#L202)
     - [`p-quantile`](src/gflownet/algo/graph_sampling.py#L172)
 - [src/gflownet/data/mix_iterator.py](src/gflownet/data/mix_iterator.py) constructs batches of data for training, handles rewards, and logs summary statistics about the sampled trajectories
-- [src/gflownet/tasks/](gflownet/src/gflownet/tasks) is a directory that contains the runnable trainer files for the various tasks on which we validate our method
+- [src/gflownet/tasks/](src/gflownet/tasks) is a directory that contains the runnable trainer files for the various tasks on which we validate our method
 
 ## Setup
 To setup the project, run the following commands to install the required base packages:

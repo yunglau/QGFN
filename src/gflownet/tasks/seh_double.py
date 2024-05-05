@@ -130,6 +130,10 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
         ) 
         
         self._get_additional_parameters = lambda: list(self.second_model.parameters())
+        # # Sometimes we need a lagged version of the first model (ex: MUN-DQN)
+        self.model_lagged = copy.deepcopy(self.model)
+        self.model_lagged.to(self.device)
+
         # # Maybe only do this if we are using DDQN?
         self.second_model_lagged = copy.deepcopy(self.second_model)
         self.second_model_lagged.to(self.device)
@@ -138,11 +142,13 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
 
     def build_training_data_loader(self):
         model, dev = self._wrap_for_mp(self.sampling_model, send_to_device=True)
+        lagged_model, _ = self._wrap_for_mp(self.model_lagged, send_to_device=True)
         gmodel, _ = self._wrap_for_mp(self.second_model, send_to_device=True)
         g_lagged_model, _ = self._wrap_for_mp(self.second_model_lagged, send_to_device=True)
         replay_buffer, _ = self._wrap_for_mp(self.replay_buffer, send_to_device=False)
         iterator = MixIterator(
             model,
+            lagged_model,
             gmodel,
             g_lagged_model,
             self.ctx,
@@ -182,10 +188,7 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
 
     def train_batch(self, batch: BatchTuple, epoch_idx: int, batch_idx: int, train_it: int) -> Dict[str, Any]:
         gfn_batch, second_batch = batch
-        # print(gfn_batch)
-        loss, info, td_error = self.algo.compute_batch_losses(self.model, self.sampling_model, gfn_batch)
-        # Update replay buffer priorities 
-        replay_buffer = self.replay_buffer.update_priorities(gfn_batch.idxs, td_error)
+        loss, info = self.algo.compute_batch_losses(self.model, self.model_lagged, gfn_batch)
         sloss, sinfo = self.second_algo.compute_batch_losses(self.second_model, second_batch, self.second_model_lagged, temp_cond=False)
         self.step(loss + sloss, train_it)  # TODO: clip second model gradients?
         info.update({f"sec_{k}": v for k, v in sinfo.items()})
@@ -196,6 +199,9 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
     def step(self, loss, train_it):
         super().step(loss)
         if self.dqn_tau > 0 and train_it % self.ddqn_update_step == 0:
+            for a, b in zip(self.model.parameters(), self.model_lagged.parameters()):
+                b.data.mul_(self.dqn_tau).add_(a.data * (1 - self.dqn_tau))
+
             for a, b in zip(self.second_model.parameters(), self.second_model_lagged.parameters()):
                 b.data.mul_(self.dqn_tau).add_(a.data * (1 - self.dqn_tau))
 
@@ -223,17 +229,17 @@ def main():
             "lr_decay": 20000,
         },
         "algo": {
+            'method': 'SQL',
             'p_greedy_sample': False,
             'p_of_max_sample': False,
             'p_quantile_sample': False,
-            'p': 0.9,
-            'dqn_tau': 0.9,
-            'dqn_n_step': 3,
-            'sampling_tau': 0.99,
+            'dqn_tau': 0.95,
+            'sampling_tau': 0.95,
             'global_batch_size': 64,
             'ddqn_update_step': 1,
             'rl_train_random_action_prob': 0.01,
             "tb": {"variant": "TB"},
+            "sql": {"alpha": 0.15, "gamma": 1.0}
         },
         "cond": {
             "temperature": {
@@ -242,7 +248,7 @@ def main():
             }
         },
         'replay': {
-            'use': True,
+            'use': False,
             'capacity': 100,
             'warmup': 0,
         },

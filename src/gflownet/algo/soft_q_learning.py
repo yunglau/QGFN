@@ -46,13 +46,17 @@ class SoftQLearning:
         self.gamma = cfg.algo.sql.gamma
         self.invalid_penalty = cfg.algo.sql.penalty
         self.bootstrap_own_reward = False
+        # Munchausen-DQN params
+        self.is_munchausen = True
+        self.entropy_coeff = 1 / (1 - self.alpha)
+        self.m_l0 = -2500.0
         # Experimental flags
         self.sample_temp = 1
         self.do_q_prime_correction = False
         self.graph_sampler = GraphSampler(ctx, env, self.max_len, self.max_nodes, rng, self.sample_temp)
 
     def create_training_data_from_own_samples(
-        self, model: nn.Module, n: int, cond_info: Tensor, random_action_prob: float
+        self, model: nn.Module, second_model: nn.Module, batch_size: int, cond_info: Tensor, random_action_prob: float = 0.0, p_greedy_sample: bool = False, p_of_max_sample: bool = False, p_quantile_sample: bool = False, scale_temp: bool=False, p: float = 1.0,
     ):
         """Generate trajectories by sampling a model
 
@@ -77,7 +81,7 @@ class SoftQLearning:
         """
         dev = self.ctx.device
         cond_info = cond_info.to(dev)
-        data = self.graph_sampler.sample_from_model(model, n, cond_info, dev, random_action_prob)
+        data = self.graph_sampler.sample_from_model(model, second_model, batch_size, cond_info, dev, random_action_prob, p_greedy_sample, p_of_max_sample, p_quantile_sample, p)
         return data
 
     def create_training_data_from_graphs(self, graphs):
@@ -93,7 +97,15 @@ class SoftQLearning:
         trajs: List[Dict{'traj': List[tuple[Graph, GraphAction]]}]
            A list of trajectories.
         """
-        return [{"traj": generate_forward_trajectory(i)} for i in graphs]
+        trajs = [{"traj": generate_forward_trajectory(i)} for i in graphs]
+        for traj in trajs:
+            n_back = [
+                self.env.count_backward_transitions(gp, check_idempotent=self.cfg.do_correct_idempotent)
+                for gp, _ in traj["traj"][1:]
+            ] + [1]
+            traj["bck_logprobs"] = (1 / torch.tensor(n_back).float()).log().to(self.ctx.device)
+            traj["result"] = traj["traj"][-1][0]
+        return trajs
 
     def construct_batch(self, trajs, cond_info, log_rewards):
         """Construct a batch from a list of trajectories and their information
@@ -113,17 +125,25 @@ class SoftQLearning:
         """
         torch_graphs = [self.ctx.graph_to_Data(i[0]) for tj in trajs for i in tj["traj"]]
         actions = [
-            self.ctx.GraphAction_to_aidx(g, a) for g, a in zip(torch_graphs, [i[1] for tj in trajs for i in tj["traj"]])
+            self.ctx.GraphAction_to_aidx(g, a)
+            for g, a in zip(torch_graphs, [i[1] for tj in trajs for i in tj["traj"]])
         ]
         batch = self.ctx.collate(torch_graphs)
         batch.traj_lens = torch.tensor([len(i["traj"]) for i in trajs])
+        batch.log_p_B = torch.cat([i["bck_logprobs"] for i in trajs], 0)
         batch.actions = torch.tensor(actions)
         batch.log_rewards = log_rewards
         batch.cond_info = cond_info
         batch.is_valid = torch.tensor([i.get("is_valid", True) for i in trajs]).float()
         return batch
 
-    def compute_batch_losses(self, model: nn.Module, batch: gd.Batch, num_bootstrap: int = 0):
+    def compute_batch_losses(
+        self,
+        model: nn.Module,
+        target_model: nn.Module,
+        batch: gd.Batch,
+        num_bootstrap: int = 0
+    ):
         """Compute the losses over trajectories contained in the batch
 
         Parameters
@@ -150,7 +170,9 @@ class SoftQLearning:
 
         # Forward pass of the model, returns a GraphActionCategorical and per molecule predictions
         # Here we will interpret the logits of the fwd_cat as Q values
-        Q, per_state_preds = model(batch, cond_info[batch_idx])
+        Q, _ = model(batch, cond_info[batch_idx])
+        with torch.no_grad():
+            lagged_Q, per_state_preds = target_model(batch, cond_info[batch_idx])
 
         if self.do_q_prime_correction:
             # First we need to estimate V_soft. We will use q_a' = \pi
@@ -160,8 +182,18 @@ class SoftQLearning:
             soft_expectation = [Q_sa / self.alpha - logprob for Q_sa, logprob in zip(Q.logits, log_policy)]
             # This allows us to more neatly just call logsumexp on the logits, and then multiply by alpha
             V_soft = self.alpha * Q.logsumexp(soft_expectation).detach()  # shape: (num_graphs,)
+        elif self.is_munchausen: 
+            # target_log_policy = lagged_Q.log_prob(batch.actions, logprobs=lagged_Q.logits).detach()
+            target_log_policy = per_state_preds[:,0]
+            munchausen_penalty = torch.clamp(
+                self.entropy_coeff * target_log_policy,
+                min=self.m_l0, max=1
+            )
+            V_soft = lagged_Q.logsumexp(lagged_Q.logits).detach()
+            V_soft[1:] += self.alpha * munchausen_penalty[:-1]
+            rewards = batch.log_rewards
         else:
-            V_soft = Q.logsumexp(Q.logits).detach()
+            V_soft = Q.logsumexp(Q.logits).detach() 
             rewards = rewards / self.alpha
 
         # Here were are again hijacking the GraphActionCategorical machinery to get Q[s,a], but
@@ -174,10 +206,11 @@ class SoftQLearning:
         # Replace V(s_T) with R(tau). Since we've shifted the values in the array, V(s_T) is V(s_0)
         # of the next trajectory in the array, and rewards are terminal (0 except at s_T).
         shifted_V_soft[final_graph_idx] = rewards + (1 - batch.is_valid) * self.invalid_penalty
+        shifted_V_soft += batch.log_p_B
         # The result is \hat Q = R_t + gamma V(s_t+1)
         hat_Q = shifted_V_soft
 
-        losses = (Q_sa - hat_Q).pow(2)
+        losses = torch.nn.functional.huber_loss(Q_sa, hat_Q, reduction="none")
         traj_losses = scatter(losses, batch_idx, dim=0, dim_size=num_trajs, reduce="sum")
         loss = losses.mean()
         invalid_mask = 1 - batch.is_valid

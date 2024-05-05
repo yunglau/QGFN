@@ -76,6 +76,7 @@ class MixIterator(IterableDataset):
     def __init__(
         self,
         first_model: nn.Module,
+        first_model_lagged: nn.Module,
         second_model: nn.Module,
         second_model_lagged: nn.Module,
         ctx: GraphBuildingEnvContext,
@@ -141,6 +142,7 @@ class MixIterator(IterableDataset):
             The initial training iteration, incremented and passed to task.sample_conditional_information
         """
         self.first_model = first_model
+        self.first_model_lagged = first_model_lagged
         self.second_model = second_model
         self.second_model_lagged = second_model_lagged
         self.batch_size = batch_size
