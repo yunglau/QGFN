@@ -170,8 +170,9 @@ class SoftQLearning:
 
         # Forward pass of the model, returns a GraphActionCategorical and per molecule predictions
         # Here we will interpret the logits of the fwd_cat as Q values
-        Q, per_state_preds = model(batch, cond_info[batch_idx])
-        policy, _ = target_model(batch, cond_info[batch_idx])
+        Q, _ = model(batch, cond_info[batch_idx])
+        with torch.no_grad():
+            lagged_Q, per_state_preds = target_model(batch, cond_info[batch_idx])
 
         if self.do_q_prime_correction:
             # First we need to estimate V_soft. We will use q_a' = \pi
@@ -182,19 +183,15 @@ class SoftQLearning:
             # This allows us to more neatly just call logsumexp on the logits, and then multiply by alpha
             V_soft = self.alpha * Q.logsumexp(soft_expectation).detach()  # shape: (num_graphs,)
         elif self.is_munchausen: 
-            target_log_policy = policy.log_prob(batch.actions, logprobs=policy.logits).detach()
+            # target_log_policy = lagged_Q.log_prob(batch.actions, logprobs=lagged_Q.logits).detach()
+            target_log_policy = per_state_preds[:,0]
             munchausen_penalty = torch.clamp(
                 self.entropy_coeff * target_log_policy,
                 min=self.m_l0, max=1
             )
-            V_soft = Q.logsumexp(Q.logits).detach() + self.alpha * munchausen_penalty
-            V_soft = V_soft + batch.log_p_B
-            # MDQN loss uses log rewards, we clip these
-            log_rewards = batch.log_rewards
-            assert log_rewards.ndim == 1
-            clip_log_R = torch.maximum(log_rewards, torch.tensor(
-                self.illegal_action_logreward, device=dev)).float()
-            rewards = clip_log_R
+            V_soft = lagged_Q.logsumexp(lagged_Q.logits).detach()
+            V_soft[1:] += self.alpha * munchausen_penalty[:-1]
+            rewards = batch.log_rewards
         else:
             V_soft = Q.logsumexp(Q.logits).detach() 
             rewards = rewards / self.alpha
@@ -209,10 +206,11 @@ class SoftQLearning:
         # Replace V(s_T) with R(tau). Since we've shifted the values in the array, V(s_T) is V(s_0)
         # of the next trajectory in the array, and rewards are terminal (0 except at s_T).
         shifted_V_soft[final_graph_idx] = rewards + (1 - batch.is_valid) * self.invalid_penalty
+        shifted_V_soft += batch.log_p_B
         # The result is \hat Q = R_t + gamma V(s_t+1)
         hat_Q = shifted_V_soft
 
-        losses = (Q_sa - hat_Q).pow(2)
+        losses = torch.nn.functional.huber_loss(Q_sa, hat_Q, reduction="none")
         traj_losses = scatter(losses, batch_idx, dim=0, dim_size=num_trajs, reduce="sum")
         loss = losses.mean()
         invalid_mask = 1 - batch.is_valid

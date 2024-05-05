@@ -233,10 +233,8 @@ def main():
             'p_greedy_sample': False,
             'p_of_max_sample': False,
             'p_quantile_sample': False,
-            'p': 0.9,
-            'dqn_tau': 0.9,
-            'dqn_n_step': 3,
-            'sampling_tau': 0.9,
+            'dqn_tau': 0.95,
+            'sampling_tau': 0.95,
             'global_batch_size': 64,
             'ddqn_update_step': 1,
             'rl_train_random_action_prob': 0.01,
@@ -250,7 +248,7 @@ def main():
             }
         },
         'replay': {
-            'use': True,
+            'use': False,
             'capacity': 100,
             'warmup': 0,
         },
