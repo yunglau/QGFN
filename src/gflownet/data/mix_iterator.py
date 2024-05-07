@@ -222,7 +222,47 @@ class MixIterator(IterableDataset):
                     p_quantile_sample=self.p_quantile_sample,
                     p=p
                 )
+# <<<<<<< Updated upstream
             
+# =======
+                
+                
+#                 # CHANGES: 
+#                 def safe(f, a, default):
+#                     try:
+#                         return f(a)
+#                     except Exception:
+#                         return default
+#                 results = [safe(self.ctx.graph_to_mol, i["result"], None) for i in first_trajs]
+#                 pred_reward, is_valid = self.first_task.compute_flat_rewards(results)
+#                 flat_rewards = list(pred_reward)
+#                 # Compute scalar rewards from conditional information & flat rewards
+#                 flat_rewards = torch.stack(flat_rewards)
+#                 log_rewards = self.first_task.cond_info_to_logreward(cond_info, flat_rewards)
+                
+#                 for i in range(len(first_trajs[:64])): 
+#                     trajectory = first_trajs[i]['traj']
+#                     for t in range(len(trajectory) - 1):
+#                         # trajs: List[Tuple[Graph, GraphAction]]
+#                         state = trajectory[t][0]
+#                         action = trajectory[t][1]
+#                         bck_logprobs = first_trajs[i]['bck_logprobs'][t].cpu()
+#                         next_state = trajectory[t+1][0]  # since the next state in trajectory[t] is the state in trajectory[t+1]
+#                         done = 0 if t < len(trajectory) - 2 else 1  # flag to check if it's the last transition in the trajectory
+#                         if done: 
+#                             reward = log_rewards[i] 
+#                         else: 
+#                             reward  = bck_logprobs
+#                         valid_traj = is_valid[i]
+                        
+#                         self.replay_buffer.push(state, action, reward, next_state, done, valid_traj)
+                    
+#                 # should return sets of (state, action, reward, next_state, done)
+#                 traj_transitions, idxs = self.replay_buffer.sample(1024)
+#                 # print("traj_transitions")
+#                 # print(traj_transitions)
+  
+# >>>>>>> Stashed changes
             all_trajs = first_trajs
             
             valid_idcs = torch.tensor(
