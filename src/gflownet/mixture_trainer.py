@@ -71,7 +71,7 @@ class MixtureOnlineTrainer(StandardOnlineTrainer):
         gmodel, dev = self._wrap_for_mp(self.second_model, send_to_device=True)
         g_lagged_model, dev = self._wrap_for_mp(self.second_model_lagged, send_to_device=True)
         replay_buffer, _ = self._wrap_for_mp(self.replay_buffer, send_to_device=False)
-
+        
         iterator = MixIterator(
             model,
             gmodel,

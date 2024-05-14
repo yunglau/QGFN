@@ -30,15 +30,16 @@ BASE_HPS: Config = {
         }
     },
     "algo": {
+        "method": "MUNDQN",
         "p_greedy_sample": False,
         "p_of_max_sample": False,
-        "p_quantile_sample": True,
+        "p_quantile_sample": False,
         "p": 0.8,
         "dqn_n_step": 25,   
-        "sampling_tau": 0.99,
+        "sampling_tau": 0.90,
         "global_batch_size": 16,
         "ddqn_update_step": 1,
-        "train_random_action_prob": 5e-4,
+        "train_random_action_prob": 0.05,
         "rl_train_random_action_prob": 0.01,
         "dqn_tau": 0.95,
         "tb": { "variant": "TB" },
@@ -62,10 +63,10 @@ if __name__ == '__main__':
 
     # Define a list of hyperparameters to test
     temperature_values: [[float]] = [32.0]
-    replay_values: [bool] = [False]
+    replay_values: [bool] = [True]
     tb_values: [str] = ["NoTB"]
     ddqn_update_steps: [int] = [1]
-    replay_buffer_size: [int] = [5000]
+    replay_buffer_size: [int] = [1_000_000]
     dqn_taus: [float] = [0.95]
     dqn_epsilons: [float] = [0.10]
     num_workers: [int] = [8]
@@ -73,7 +74,7 @@ if __name__ == '__main__':
     batch_size: [int] = [64]
     p_greedy_sample: [bool] = [False]
     p_of_max_sample: [bool] = [False]
-    p_quantile_sample: [bool] = [True]
+    p_quantile_sample: [bool] = [False]
     prob: [float] = [0.8]
     dqn_n_step: [float] = [25]
 

@@ -9,6 +9,7 @@ from gflownet.algo.graph_sampling import GraphSampler
 from gflownet.config import Config
 from gflownet.envs.graph_building_env import GraphBuildingEnv, GraphBuildingEnvContext, generate_forward_trajectory
 
+import pdb
 
 class SoftQLearning:
     def __init__(
@@ -47,7 +48,7 @@ class SoftQLearning:
         self.invalid_penalty = cfg.algo.sql.penalty
         self.bootstrap_own_reward = False
         # Munchausen-DQN params
-        self.is_munchausen = True
+        self.is_munchausen = False
         self.entropy_coeff = 1 / (1 - self.alpha)
         self.m_l0 = -2500.0
         # Experimental flags
@@ -107,7 +108,7 @@ class SoftQLearning:
             traj["result"] = traj["traj"][-1][0]
         return trajs
 
-    def construct_batch(self, trajs, cond_info, log_rewards):
+    def construct_batch(self, trajs, cond_info, log_rewards, idxs=None):
         """Construct a batch from a list of trajectories and their information
 
         Parameters
@@ -135,6 +136,7 @@ class SoftQLearning:
         batch.log_rewards = log_rewards
         batch.cond_info = cond_info
         batch.is_valid = torch.tensor([i.get("is_valid", True) for i in trajs]).float()
+        # batch.idxs = idxs
         return batch
 
     def compute_batch_losses(
@@ -183,14 +185,15 @@ class SoftQLearning:
             # This allows us to more neatly just call logsumexp on the logits, and then multiply by alpha
             V_soft = self.alpha * Q.logsumexp(soft_expectation).detach()  # shape: (num_graphs,)
         elif self.is_munchausen: 
-            # target_log_policy = lagged_Q.log_prob(batch.actions, logprobs=lagged_Q.logits).detach()
-            target_log_policy = per_state_preds[:,0]
-            munchausen_penalty = torch.clamp(
-                self.entropy_coeff * target_log_policy,
-                min=self.m_l0, max=1
-            )
+            # pdb.set_trace()
+            target_log_policy = lagged_Q.log_prob(batch.actions, logprobs=lagged_Q.logits).detach()
+            # target_log_policy = lagged_Q.logsoftmax()
+            # munchausen_penalty = [torch.clamp(self.entropy_coeff * lp, min=self.m_l0, max=1) for lp in target_log_policy]
+            munchausen_penalty = self.alpha * torch.clamp(self.entropy_coeff * target_log_policy,min=self.m_l0, max=1)
+            
+            # logsumexp(Q(s))
             V_soft = lagged_Q.logsumexp(lagged_Q.logits).detach()
-            V_soft[1:] += self.alpha * munchausen_penalty[:-1]
+            # V_soft[1:] += self.alpha * munchausen_penalty[:-1]
             rewards = batch.log_rewards
         else:
             V_soft = Q.logsumexp(Q.logits).detach() 
@@ -206,11 +209,10 @@ class SoftQLearning:
         # Replace V(s_T) with R(tau). Since we've shifted the values in the array, V(s_T) is V(s_0)
         # of the next trajectory in the array, and rewards are terminal (0 except at s_T).
         shifted_V_soft[final_graph_idx] = rewards + (1 - batch.is_valid) * self.invalid_penalty
-        shifted_V_soft += batch.log_p_B
         # The result is \hat Q = R_t + gamma V(s_t+1)
         hat_Q = shifted_V_soft
 
-        losses = torch.nn.functional.huber_loss(Q_sa, hat_Q, reduction="none")
+        losses = (Q_sa - hat_Q).pow(2)
         traj_losses = scatter(losses, batch_idx, dim=0, dim_size=num_trajs, reduce="sum")
         loss = losses.mean()
         invalid_mask = 1 - batch.is_valid

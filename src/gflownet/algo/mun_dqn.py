@@ -10,6 +10,7 @@ from gflownet.algo.graph_sampling import GraphSampler
 from gflownet.config import Config
 from gflownet.envs.graph_building_env import GraphBuildingEnv, GraphBuildingEnvContext, generate_forward_trajectory
 
+import pdb
 
 class Munchausen_DQN:
     def __init__(
@@ -146,12 +147,17 @@ class Munchausen_DQN:
             self.ctx.GraphAction_to_aidx(g, a) for g, a in zip(torch_graphs, actions)
         ]
         
+        # bck_actions = [
+        #     self.ctx.GraphAction_to_aidx(g, a) for g, a in zip(torch_graphs, backward_actions)
+        # ]
+        
         batch = self.ctx.collate(torch_graphs)
         batch.next_states = self.ctx.collate(torch_graphs_next_states)
         batch.actions = torch.tensor(actions)
         batch.log_rewards = log_rewards
         batch.dones = dones
         batch.cond_info = cond_info
+        # batch.bck_actions = bck_actions
         batch.is_valid = valid_traj
         # batch.is_valid = torch.tensor([i.get("is_valid", True) for i in trajs]).float()
         batch.transitions = transitions
@@ -188,43 +194,38 @@ class Munchausen_DQN:
 
         # Forward pass of the model, returns a GraphActionCategorical and per molecule predictions
         # Here we will interpret the logits of the fwd_cat as Q values
-        is_valid = torch.tensor(batch.is_valid.float()).to('cuda')
+        is_valid = batch.is_valid.float().clone().detach().to('cuda')
         Q, per_state_preds = model(batch, cond_info)
         with torch.no_grad():
             Q_target_st, _ = target_model(batch, cond_info)
             Qp_target_next_st, _ = target_model(batch.next_states, cond_info)
-
-        if self.do_q_prime_correction:
-            # First we need to estimate V_soft. We will use q_a' = \pi
-            log_policy = Q.logsoftmax()
-            # in Eq (10) we have an expectation E_{a~q_a'}[exp(1/alpha Q(s,a))/q_a'(a)]
-            # we rewrite the inner part `exp(a)/b` as `exp(a-log(b))` since we have the log_policy probabilities
-            soft_expectation = [Q_sa / self.alpha - logprob for Q_sa, logprob in zip(Q.logits, log_policy)]
-            # This allows us to more neatly just call logsumexp on the logits, and then multiply by alpha
-            V_soft = self.alpha * Q.logsumexp(soft_expectation).detach()  # shape: (num_graphs,)
-
-        else:
-            V_soft = Q.logsumexp(Q.logits).detach()
-            # rewards = rewards / self.alpha'
         
         # Here were are again hijacking the GraphActionCategorical machinery to get Q[s,a], but
         # instead of logprobs we're just going to use the logits, i.e. the Q values.
         Q_sa = Q.log_prob(batch.actions, logprobs=Q.logits)
         
+        # log_p_B = bck_cat.log_prob(batch.bck_actions)
+        
         second_term = (1 - dones) * Qp_target_next_st.logsumexp(Qp_target_next_st.logits).detach()
         
         # Now we are computing the third term 
         # Compute the log probabilities of the actions using the policy logits
-        munchausen_term = (1/(1-0.15)) * Q_target_st.log_prob(batch.actions, logprobs=Q.logits)
+        munchausen_term = self.entropy_coefficient * Q_target_st.log_prob(batch.actions).detach()
+        
+        # print(munchausen_term)
         
         # Clamp the Munchausen term to a specified range
-        munchausen_penalty = 0.15 * torch.clamp(munchausen_term, min=torch.tensor(-2500).to('cuda'), max=torch.tensor(1).to('cuda'))
+        munchausen_penalty = self.alpha * torch.clamp(munchausen_term, min=torch.tensor(-2500).to('cuda'), max=torch.tensor(1).to('cuda'))
         
-        hat_Q = mdp_rewards + second_term + munchausen_term
+        # pdb.set_trace()
         
-        losses = nn.functional.huber_loss(Q_sa, hat_Q, reduction="none")
+        # print("munchausen_penalty")
+        # print(munchausen_penalty)
         
-        # traj_losses = scatter(losses, batch_idx, dim=0, dim_size=num_trajs, reduce="sum")
+        hat_Q = mdp_rewards.clone().detach().to('cuda') + second_term + munchausen_term
+        
+        losses = nn.functional.huber_loss(Q_sa, hat_Q, reduction="none") # used to update priority 
+        
         loss = losses.mean()
         # print(loss)
         invalid_mask = 1 - is_valid
@@ -235,6 +236,4 @@ class Munchausen_DQN:
             "Q_sa": Q_sa.mean().item(),
         }
 
-        # if not torch.isfinite(traj_losses).all():
-        #     raise ValueError("loss is not finite")
         return loss, info, losses

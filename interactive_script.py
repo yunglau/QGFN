@@ -3,7 +3,7 @@ from gflownet.tasks.seh_double import SEHDoubleModelTrainer
 # # from gflownet.tasks.qm9.qm9_double import QM9MixtureModelTrainer
 # from gflownet.tasks.bitseq.bitseq_mix import BitSeqMixTrainer
 
-log_root = '/network/scratch/e/elaine.lau/mun_dqn/sampling_tau_15_beta16'
+log_root = '/network/scratch/e/elaine.lau/mun_dqn/sampling_tau_15_beta32_replay_50000'
 
 base_hps = {
     'log_dir': log_root,
@@ -24,7 +24,7 @@ base_hps = {
         'scheduler_type': 'cosine_annealing',
         'p': 0.4,
         'dqn_n_step': 30,
-        'sampling_tau': 0.15,
+        'sampling_tau': 0.9,
         'global_batch_size': 64,
         'ddqn_update_step': 1,
         'train_random_action_prob': 0.05,
@@ -34,14 +34,14 @@ base_hps = {
     'cond': {
         'temperature': {
             'sample_dist': 'constant',
-            'dist_params': [16.0],
+            'dist_params': [32.0],
             'num_thermometer_dim': 32,
         }
     },
     'replay': {
         'use': True,
         'capacity': 1_000_000,
-        'warmup': 0,
+        'warmup': 4096,
     },
     "task": {
         "qm9": {

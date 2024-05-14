@@ -79,14 +79,15 @@ class FMConfig:
 
 @dataclass
 class SQLConfig:
-    alpha: float = 0.01
+    alpha: float = 0.15
     gamma: float = 1
     penalty: float = -10
     
 
 @dataclass
 class MUNConfig:
-    tau: float = 0.01
+    tau: float = 0.05
+    alpha: float = 0.15
     epsilon: float = 0.1 
     
 

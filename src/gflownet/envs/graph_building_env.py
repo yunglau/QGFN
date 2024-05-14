@@ -15,6 +15,7 @@ from rdkit.Chem import Mol
 from torch_scatter import scatter, scatter_max
 
 
+
 class Graph(nx.Graph):
     # Subclassing nx.Graph for debugging purposes
     def __str__(self):

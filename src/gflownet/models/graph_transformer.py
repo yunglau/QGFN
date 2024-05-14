@@ -207,6 +207,9 @@ class GraphTransformerGFN(nn.Module):
         self._action_type_to_key = {
             at: self._graph_part_to_key[self._action_type_to_graph_part[at]] for at in self._action_type_to_graph_part
         }
+        
+        do_bck = False #CHANGE IT BACK
+        self.do_bck = False #CHANGE IT BACK
 
         # Here we create only the embedding -> logit mapping MLPs that are required by the environment
         mlps = {}
@@ -215,7 +218,6 @@ class GraphTransformerGFN(nn.Module):
             mlps[atype.cname] = mlp(num_in, num_emb, num_out, cfg.model.graph_transformer.num_mlp_layers)
         self.mlps = nn.ModuleDict(mlps)
 
-        self.do_bck = do_bck
         if do_bck:
             self.bck_action_type_order = env_ctx.bck_action_type_order
 

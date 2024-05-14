@@ -433,7 +433,7 @@ if __name__ == "__main__":
     # Specify the runs you want to plot here.
     runs = [
         {
-            'path': "/network/scratch/e/elaine.lau/logs/QGFN/2024-03-25/40081972-04f7-4c0b-a182-4cdaf1c52571-14-04-03/",
+            'path': "/home/mila/e/elaine.lau/QGFN/logs/2024-05-08/73dd92e7-a11d-4a9b-9eb1-ba967ee7adaf-11-54-11/",
             'name': 'p-quantile QGFN',
             'color': 'red',
         },
@@ -448,7 +448,7 @@ if __name__ == "__main__":
     
     plot_type = PlotType.AVERAGE_REWARD
     # plot_type = PlotType.TOP_K_SIMILARITY
-    plot_type = PlotType.NUMBER_OF_MODES
+    # plot_type = PlotType.NUMBER_OF_MODES
     # plot_type = PlotType.NUMBER_OF_MODES_AT_K
     # plot_type = PlotType.AVERAGE_REWARD_AT_K
 

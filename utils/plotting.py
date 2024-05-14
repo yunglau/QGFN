@@ -92,7 +92,7 @@ class PlottableRunObject(RunObject):
                 raw data for each seed. The keys of the dictionary are the column names
                 and the values are lists of lists containing the data for each worker.
         """
-        self.log_dir = "/network/scratch/e/elaine.lau/logs/QGFN/2024-03-25/40081972-04f7-4c0b-a182-4cdaf1c52571-14-04-03"
+        self.log_dir = "/home/mila/e/elaine.lau/QGFN/logs/2024-05-08/73dd92e7-a11d-4a9b-9eb1-ba967ee7adaf-11-54-11"
         return [
             sqlite_load(f'{self.log_dir}/seed-{i+1}/train/', sqlite_cols, 8)
             for i in range(self.num_seeds)
@@ -193,7 +193,7 @@ class MolsPlottableRunObject(PlottableRunObject):
         Returns a pandas dataframe with the number of modes with reward > min_reward and 
         similarity > sim_threshold for each worker at each step.
         """
-        self.log_dir = '/network/scratch/e/elaine.lau/logs/QGFN/2024-03-25/40081972-04f7-4c0b-a182-4cdaf1c52571-14-04-03'
+        self.log_dir = '/home/mila/e/elaine.lau/QGFN/logs/2024-05-08/73dd92e7-a11d-4a9b-9eb1-ba967ee7adaf-11-54-11/'
         
         df = try_to_load_df(f'{self.log_dir}/num_modes.csv')
         if df is not None:
