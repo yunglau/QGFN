@@ -1,5 +1,15 @@
 # QGFN: Controllable Greediness with Action Values
 
+## Table of Contents
+- [Description](#description)
+- [Overview](#overview)
+- [Setup](#setup)
+- [How to Run](#how-to-run)
+- [Usage](#usage)
+  - [Training from Scratch](#training-from-scratch)
+  - [Plotting Results](#plotting-results)
+- [Updates](#updates)
+
 ## Description
 This repository contains the code to run the experiments and visualize the results highlighted in the paper [QGFN: Controllable Greediness with Action Values](https://arxiv.org/abs/2402.05234).
 
@@ -186,3 +196,10 @@ def get_top_k_similarity(self):
 def get_reward_distribution(self):
     pass
 ```
+
+## Updates
+
+### 2024-05-15
+- **Included `hps.yaml` Configuration File**: We have added a `hps.yaml` file to streamline the process of replicating our results. You can find this file in the `config` directory. This file contains all the hyperparameters used in our experiments, ensuring that you can easily replicate the training conditions and results.
+
+
