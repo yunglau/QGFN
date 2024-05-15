@@ -1,7 +1,7 @@
-# QGFN
+# QGFN: Controllable Greediness with Action Values
 
 ## Description
-This repository contains the code to run the experiments and visualize the results highlighted in the paper [QGFN: Controllable Greediness with Action Values]().
+This repository contains the code to run the experiments and visualize the results highlighted in the paper [QGFN: Controllable Greediness with Action Values](https://arxiv.org/abs/2402.05234).
 
 ## Overview
 Our codebase builds on top of a fork of the public [recursion gflownet](https://github.com/recursionpharma/gflownet) repo which provides the environment setup to run the gflownet framework on graph domains. Our main edits to the forked repo are found in the following files
