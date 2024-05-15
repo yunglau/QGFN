@@ -385,6 +385,7 @@ class MixIterator(IterableDataset):
             bt.extra_info = {
                 "first_avg_len": sum([len(i["traj"]) for i in first_trajs]) / len(first_trajs),
                 "self.p": p,
+                "avg_rew": first_log_rewards.mul(1 / cond_info['beta']).exp().mean().item(),
             }
             
             # print(bt)

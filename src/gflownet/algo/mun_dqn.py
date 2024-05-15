@@ -180,7 +180,10 @@ class Munchausen_DQN:
         # A single trajectory is comprised of many graphs
         # num_trajs = int(batch.traj_lens.shape[0])
         # rewards = torch.exp(batch.log_rewards)
-        mdp_rewards = batch.log_rewards
+        mdp_rewards_unclip = batch.log_rewards
+        mdp_rewards = torch.maximum(
+            mdp_rewards_unclip, torch.tensor(self.illegal_action_logreward, device=dev)
+        ).float()
         cond_info = batch.cond_info
         dones = batch.dones
         dones = torch.tensor(dones).cuda()
@@ -203,6 +206,9 @@ class Munchausen_DQN:
         # Here were are again hijacking the GraphActionCategorical machinery to get Q[s,a], but
         # instead of logprobs we're just going to use the logits, i.e. the Q values.
         Q_sa = Q.log_prob(batch.actions, logprobs=Q.logits)
+        # By default, the Q_sa values are multiplied by 1/lambda to get the Softmax_\lambda policy, so we have to
+        # un-multiply them to get the correct objective
+        Q_sa = Q_sa * self.entropy_coefficient
         
         # log_p_B = bck_cat.log_prob(batch.bck_actions)
         
@@ -234,6 +240,7 @@ class Munchausen_DQN:
             "invalid_trajectories": invalid_mask.sum() / batch.num_online if batch.num_online > 0 else 0,
             # "invalid_losses": (invalid_mask * traj_losses).sum() / (invalid_mask.sum() + 1e-4),
             "Q_sa": Q_sa.mean().item(),
+            "term_loss": losses[dones.bool()].mean().item(),
         }
 
         return loss, info, losses

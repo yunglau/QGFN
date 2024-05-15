@@ -2,6 +2,7 @@ from typing import List
 
 import numpy as np
 import torch
+from threading import Lock
 
 from gflownet.config import Config
 import random
@@ -25,21 +26,23 @@ class ReplayBuffer(object):
         
         self.real_size = 0
         self.size = self.capacity
+        self.insertion_lock = Lock()
         
         
     def push(self, *args):
-        traj = args 
-        """Stores a transition in the buffer."""
-        # store transition index with maximum priority in sum tree
-        self.tree.add(self.max_priority, self.count)
+        with self.insertion_lock:
+            traj = args 
+            """Stores a transition in the buffer."""
+            # store transition index with maximum priority in sum tree
+            self.tree.add(self.max_priority, self.count)
 
-        # store transition in the buffer
-        self.buffer[self.count] = args
-        # self.priorities[self.count] = 0
+            # store transition in the buffer
+            self.buffer[self.count] = args
+            # self.priorities[self.count] = 0
 
-        # update counters
-        self.count = (self.count + 1) % self.size
-        self.real_size = min(self.size, self.real_size + 1)
+            # update counters
+            self.count = (self.count + 1) % self.size
+            self.real_size = min(self.size, self.real_size + 1)
             
     def sample(self, batch_size): 
         # print(self.real_size)
@@ -53,18 +56,20 @@ class ReplayBuffer(object):
         # To sample a minibatch of size k, the range [0, p_total] is divided equally into k ranges.
         # Next, a value is uniformly sampled from each range. Finally the transitions that correspond
         # to each of these sampled values are retrieved from the tree. (Appendix B.2.1, Proportional prioritization)
-        segment = self.tree.total / batch_size
-        for i in range(batch_size):
-            a, b = segment * i, segment * (i + 1)
+        with self.insertion_lock:  # While we're not modifying the SumTree here, if the total is modified while we're 
+                                   # sampling, the `cumsum` value won't make sense anymore.
+            segment = self.tree.total / batch_size
+            for i in range(batch_size):
+                a, b = segment * i, segment * (i + 1)
 
-            cumsum = random.uniform(a, b)
-            # sample_idx is a sample index in buffer, needed further to sample actual transitions
-            # tree_idx is a index of a sample in the tree, needed further to update priorities
-            tree_idx, priority, sample_idx = self.tree.get(cumsum)
+                cumsum = random.uniform(a, b)
+                # sample_idx is a sample index in buffer, needed further to sample actual transitions
+                # tree_idx is a index of a sample in the tree, needed further to update priorities
+                tree_idx, priority, sample_idx = self.tree.get(cumsum)
 
-            priorities[i] = priority
-            tree_idxs.append(tree_idx)
-            sample_idxs.append(sample_idx)
+                priorities[i] = priority
+                tree_idxs.append(tree_idx)
+                sample_idxs.append(sample_idx)
 
         # Concretely, we define the probability of sampling transition i as P(i) = p_i^α / \sum_{k} p_k^α
         # where p_i > 0 is the priority of transition i. (Section 3.3)
@@ -104,14 +109,15 @@ class ReplayBuffer(object):
         if isinstance(priorities, torch.Tensor):
             priorities = priorities.detach().cpu().numpy()
 
-        for data_idx, priority in zip(data_idxs, priorities):
-            # The first variant we consider is the direct, proportional prioritization where p_i = |δ_i| + eps,
-            # where eps is a small positive constant that prevents the edge-case of transitions not being
-            # revisited once their error is zero. (Section 3.3)
-            priority = (priority + self.eps) ** self.alpha
+        with self.insertion_lock:
+            for data_idx, priority in zip(data_idxs, priorities):
+                # The first variant we consider is the direct, proportional prioritization where p_i = |δ_i| + eps,
+                # where eps is a small positive constant that prevents the edge-case of transitions not being
+                # revisited once their error is zero. (Section 3.3)
+                priority = (priority + self.eps) ** self.alpha
 
-            self.tree.update(data_idx, priority)
-            self.max_priority = max(self.max_priority, priority)
+                self.tree.update(data_idx, priority)
+                self.max_priority = max(self.max_priority, priority)
             
     def __len__(self):
         # print(self.real_size)

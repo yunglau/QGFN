@@ -190,6 +190,7 @@ class GraphTransformerGFN(nn.Module):
         self.edges_are_duplicated = env_ctx.edges_are_duplicated
         self.edges_are_unordered = env_ctx.edges_are_unordered
         self.action_type_order = env_ctx.action_type_order
+        self.logit_multiplier = 1
 
         # Every action type gets its own MLP that is fed the output of the GraphTransformer.
         # Here we define the number of inputs and outputs of each of those (potential) MLPs.
@@ -238,9 +239,10 @@ class GraphTransformerGFN(nn.Module):
         return x * m + -1000 * (1 - m)
 
     def _make_cat(self, g, emb, action_types):
+        c = self.logit_multiplier
         return GraphActionCategorical(
             g,
-            logits=[self._action_type_to_logit(t, emb, g) for t in action_types],
+            logits=[self._action_type_to_logit(t, emb, g) * c for t in action_types],
             keys=[self._action_type_to_key[t] for t in action_types],
             masks=[self._action_type_to_mask(t, g) for t in action_types],
             types=action_types,

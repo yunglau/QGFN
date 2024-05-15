@@ -125,6 +125,9 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
         
     def setup_model(self):
         super().setup_model()
+        print("Logit multiplier: ", 1 / self.algo.entropy_coefficient)
+        self.model.logit_multiplier = 1 / self.algo.entropy_coefficient  # Softmax_lambda/LogSumExp_lambda in MunDQN
+
         self.second_model = GraphTransformerGFN(
             self.second_ctx,
             self.cfg, 
