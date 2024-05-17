@@ -26,9 +26,6 @@ class HParams(TypedDict):
 make_py_script = lambda task, hps, log_dir, seeds=5: f"""
 import sys, os
 from gflownet.tasks.seh_double import SEHDoubleModelTrainer
-from gflownet.tasks.qm9.qm9_double import QM9MixtureModelTrainer
-from gflownet.tasks.bitseq.bitseq_mix import BitSeqMixTrainer
-from gflownet.tasks.rna_bind_double import RNABindDoubleTrainer
 
 base_hps = {hps}
 
@@ -110,7 +107,7 @@ class RunObject():
     def make_hparams_obj(self, p):
         temp, use_replay, tb_variant, ddqn_update_step, buffer_size,\
             dqn_tau, dqn_epsilon, num_workers, num_training_steps, batch_size,\
-            p_greedy_sample, p_of_max_sample, p_quantile_sample, prob, dqn_n_step = p
+            dqn_n_step, prob, p_greedy_sample, p_of_max_sample, p_quantile_sample = p
         
         self.hparams = {
             "temperature": temp if type(temp) == list else [temp],

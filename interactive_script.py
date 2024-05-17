@@ -15,10 +15,11 @@ base_hps = {
         'lr_decay': 2000
     },
     'algo': {
+        "tb": {"variant": "SubTB1"},
         'p_greedy_sample': True,
         'p_of_max_sample': False,
         'p_quantile_sample': False,
-        'scheduler_step': 500,
+        'scheduler_step': 1500,
         'scheduler_type': 'cosine_annealing',
         'p': 0.4,
         'dqn_n_step': 25,
