@@ -57,17 +57,8 @@ class QLearning(GFNAlgorithm):
         assert self.gamma == 1, "Gamma != 1 not implemented yet"
 
     def create_training_data_from_own_samples(
-        self,
-        model: nn.Module,
-        batch_size: int,
-        cond_info: Tensor,
-        random_action_prob: float = 0.0,
-        p_greedy_sample: bool = False, 
-        p_of_max_sample: bool = False,
-        p_quantile_sample: bool = False,
-        p: float = 1.0,
-        starts: Optional[List[Graph]] = None,
-    ) -> List[Dict[str, Tensor]]:
+        self, model: nn.Module, second_model: nn.Module, batch_size: int, cond_info: Tensor, random_action_prob: float = 0.0, p_greedy_sample: bool = False, p_of_max_sample: bool = False, p_quantile_sample: bool = False, scale_temp: bool=False, p: float = 1.0,
+    ):
         """Generate trajectories by sampling a model
 
         Parameters
@@ -91,10 +82,7 @@ class QLearning(GFNAlgorithm):
         """
         dev = self.ctx.device
         cond_info = cond_info.to(dev)
-        data = self.graph_sampler.sample_from_model(
-            model, batch_size, cond_info, dev, random_action_prob, \
-            p_greedy_sample, p_of_max_sample, p_quantile_sample, p, starts=starts
-        )
+        data = self.graph_sampler.sample_from_model(model, second_model, batch_size, cond_info, dev, random_action_prob, p_greedy_sample, p_of_max_sample, p_quantile_sample, p)
         return data
 
     def create_training_data_from_graphs(self, graphs):

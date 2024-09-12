@@ -17,11 +17,11 @@ import seaborn as sns
 from collections import defaultdict
 
 from utils.metrics import (
-    mean_all,
     mean_confidence_interval,
     get_groupby_value,
     smooth,
     smooth_ci,
+    aggregate_iqm
 )
 
 from utils.plotting import (
@@ -295,7 +295,7 @@ class PlotConfig():
         for idx, df in enumerate(dfs):
             run = self.runs[idx]
             values = [df[f'value_{i}'] for i in range(run.num_seeds - 1)]
-            y_range = mean_all(values, axis=0)
+            y_range = aggregate_iqm(values, axis=0)
 
             fig.plot(*smooth(y_range, n=n), label=run.name, color=run.color)
 
@@ -317,14 +317,18 @@ class PlotConfig():
 
         for idx, df in enumerate(dfs):
             run = self.runs[idx]
-            values = [df[f'value_{i}'] for i in range(run.num_seeds - 1)]
-            y_range = mean_all(values, axis=0)
+            # values = [df[f'value_{i}'] for i in range(5 - 1)]
+            # y_range = aggregate_iqm(values, axis=0)
 
-            fig.plot(*smooth(y_range, n=n), label=run.name, color=run.color)
+            # fig.plot(*smooth(y_range, n=n), label=run.name, color=run.color)
+            
+            for i in range(5):
+                values = df[f'value_{i}']
+                fig.plot(*smooth(values, n=n), label=f'seed {i}', color=run.color)
 
-            if conf_interval != None:
-                _, ci_l, ci_h = mean_confidence_interval(values, y_range, conf_interval)
-                fig.fill_between(*smooth_ci(ci_l, ci_h, n=n), alpha=0.4, facecolor=run.color)
+            # if conf_interval != None:
+            #     _, ci_l, ci_h = mean_confidence_interval(values, y_range, conf_interval)
+            #     fig.fill_between(*smooth_ci(ci_l, ci_h, n=n), alpha=0.4, facecolor=run.color)
 
     def plot_number_of_modes_at_k(self, ax: plt.Axes, fig: plt.Figure):
         dfs = [
@@ -429,8 +433,8 @@ if __name__ == "__main__":
     # Specify the runs you want to plot here.
     runs = [
         {
-            'path': "path.to.run.directory",
-            'name': 'TB',
+            'path': "/home/mila/e/elaine.lau/QGFN/logs/2024-05-08/73dd92e7-a11d-4a9b-9eb1-ba967ee7adaf-11-54-11/",
+            'name': 'p-quantile QGFN',
             'color': 'red',
         },
     ]
@@ -459,8 +463,8 @@ if __name__ == "__main__":
         **DEFAULT_UNIQUE_PARAMS[plot_type],
         # Add your custom parameters here.
         # ...
-        'min_reward': 0.9,
-        'sim_threshold': 0.7,
+        'min_reward': 0.97,
+        'sim_threshold': 0.65,
     }
 
     # Generate and save the plot

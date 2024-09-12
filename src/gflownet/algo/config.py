@@ -79,10 +79,17 @@ class FMConfig:
 
 @dataclass
 class SQLConfig:
-    alpha: float = 0.01
+    alpha: float = 0.10
     gamma: float = 1
     penalty: float = -10
+    
 
+@dataclass
+class MUNConfig:
+    tau: float = 0.05
+    alpha: float = 0.10
+    epsilon: float = 0.1 
+    
 
 @dataclass
 class AlgoConfig:
@@ -145,5 +152,6 @@ class AlgoConfig:
     tb: TBConfig = TBConfig()
     moql: MOQLConfig = MOQLConfig()
     a2c: A2CConfig = A2CConfig()
+    mun_dqn: MUNConfig = MUNConfig()
     fm: FMConfig = FMConfig()
     sql: SQLConfig = SQLConfig()

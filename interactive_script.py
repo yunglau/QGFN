@@ -1,9 +1,9 @@
 import torch
 from gflownet.tasks.seh_double import SEHDoubleModelTrainer
-# from gflownet.tasks.qm9.qm9_double import QM9MixtureModelTrainer
-from gflownet.tasks.bitseq.bitseq_mix import BitSeqMixTrainer
+# # from gflownet.tasks.qm9.qm9_double import QM9MixtureModelTrainer
+# from gflownet.tasks.bitseq.bitseq_mix import BitSeqMixTrainer
 
-log_root = '../jobs/test'
+log_root = '/network/scratch/e/elaine.lau/mun_dqn/sampling_tau_15_beta32_replay_50000'
 
 base_hps = {
     'log_dir': log_root,
@@ -13,33 +13,35 @@ base_hps = {
     'validate_every': 0,
     'num_workers': 0,
     'opt': {
-        'lr_decay': 20000
+        'lr_decay': 2000
     },
     'algo': {
-        'p_greedy_sample': True,
+        'method': 'MUNDQN',
+        'p_greedy_sample': False,
         'p_of_max_sample': False,
         'p_quantile_sample': False,
         'scheduler_step': 1500,
         'scheduler_type': 'cosine_annealing',
         'p': 0.4,
         'dqn_n_step': 30,
-        'sampling_tau': 0.99,
+        'sampling_tau': 0.9,
         'global_batch_size': 64,
         'ddqn_update_step': 1,
-        'rl_train_random_action_prob': 0.01,
+        'train_random_action_prob': 0.05,
+        'rl_train_random_action_prob': 0.05,
         'dqn_tau': 0.9
     },
     'cond': {
         'temperature': {
             'sample_dist': 'constant',
-            'dist_params': [3.0],
+            'dist_params': [32.0],
             'num_thermometer_dim': 32,
         }
     },
     'replay': {
-        'use': False,
-        'capacity': 100,
-        'warmup': 0,
+        'use': True,
+        'capacity': 1_000_000,
+        'warmup': 4096,
     },
     "task": {
         "qm9": {
@@ -54,7 +56,7 @@ base_hps = {
     }
 }
 
-trial = BitSeqMixTrainer(base_hps)
+trial = SEHDoubleModelTrainer(base_hps)
 trial.print_every = 1
 trial.run()
 

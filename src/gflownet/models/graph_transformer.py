@@ -190,6 +190,7 @@ class GraphTransformerGFN(nn.Module):
         self.edges_are_duplicated = env_ctx.edges_are_duplicated
         self.edges_are_unordered = env_ctx.edges_are_unordered
         self.action_type_order = env_ctx.action_type_order
+        self.logit_multiplier = 1
 
         # Every action type gets its own MLP that is fed the output of the GraphTransformer.
         # Here we define the number of inputs and outputs of each of those (potential) MLPs.
@@ -207,6 +208,9 @@ class GraphTransformerGFN(nn.Module):
         self._action_type_to_key = {
             at: self._graph_part_to_key[self._action_type_to_graph_part[at]] for at in self._action_type_to_graph_part
         }
+        
+        do_bck = False #CHANGE IT BACK
+        self.do_bck = False #CHANGE IT BACK
 
         # Here we create only the embedding -> logit mapping MLPs that are required by the environment
         mlps = {}
@@ -215,7 +219,6 @@ class GraphTransformerGFN(nn.Module):
             mlps[atype.cname] = mlp(num_in, num_emb, num_out, cfg.model.graph_transformer.num_mlp_layers)
         self.mlps = nn.ModuleDict(mlps)
 
-        self.do_bck = do_bck
         if do_bck:
             self.bck_action_type_order = env_ctx.bck_action_type_order
 
@@ -236,9 +239,10 @@ class GraphTransformerGFN(nn.Module):
         return x * m + -1000 * (1 - m)
 
     def _make_cat(self, g, emb, action_types):
+        c = self.logit_multiplier
         return GraphActionCategorical(
             g,
-            logits=[self._action_type_to_logit(t, emb, g) for t in action_types],
+            logits=[self._action_type_to_logit(t, emb, g) * c for t in action_types],
             keys=[self._action_type_to_key[t] for t in action_types],
             masks=[self._action_type_to_mask(t, g) for t in action_types],
             types=action_types,

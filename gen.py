@@ -21,7 +21,7 @@ BASE_HPS: Config = {
     "validate_every": 0,
     "num_workers": 0,
     "opt": {
-        "lr_decay": 20000,
+        "lr_decay": 2000,
     },
     "cond": {
         "temperature": {
@@ -30,30 +30,31 @@ BASE_HPS: Config = {
         }
     },
     "algo": {
+        "method": "MUNDQN",
         "p_greedy_sample": False,
         "p_of_max_sample": False,
-        "p_quantile_sample": True,
+        "p_quantile_sample": False,
         "p": 0.8,
         "dqn_n_step": 25,   
-        "sampling_tau": 0.99,
+        "sampling_tau": 0.90,
         "global_batch_size": 16,
         "ddqn_update_step": 1,
-        "train_random_action_prob": 5e-4,
-        "rl_train_random_action_prob": 5e-4,
+        "train_random_action_prob": 0.05,
+        "rl_train_random_action_prob": 0.01,
         "dqn_tau": 0.95,
         "tb": { "variant": "TB" },
     },
-    "task": {
-        "qm9": {
-            "h5_path": "path.to.dataset/qm9.h5",
-            "model_path": "path.to.model/mxmnet_gap_model.pt"
-        },
-        "bitseq": {
-            "variant": "prepend-append",
-            "modes_path": "data/modes.pkl",
-            "k": 4,
-        }
-    }
+    # "task": {
+    #     "qm9": {
+    #         "h5_path": "path.to.dataset/qm9.h5",
+    #         "model_path": "path.to.model/mxmnet_gap_model.pt"
+    #     },
+    #     "bitseq": {
+    #         "variant": "prepend-append",
+    #         "modes_path": "data/modes.pkl",
+    #         "k": 4,
+    #     }
+    # }
 }
 
 
@@ -61,20 +62,20 @@ if __name__ == '__main__':
     assert TASK in ["seh", "qm9", "bitseq", "rna"], f'Invalid task: {TASK}'
 
     # Define a list of hyperparameters to test
-    temperature_values: [[float]] = [4.0, 8.0, 16.0, 32.0]
-    replay_values: [bool] = [False]
+    temperature_values: [[float]] = [32.0]
+    replay_values: [bool] = [True]
     tb_values: [str] = ["NoTB"]
     ddqn_update_steps: [int] = [1]
-    replay_buffer_size: [int] = [5000]
+    replay_buffer_size: [int] = [1_000_000]
     dqn_taus: [float] = [0.95]
     dqn_epsilons: [float] = [0.10]
-    num_workers: [int] = [0]
+    num_workers: [int] = [8]
     num_training_steps: [int] = [10_000]
     batch_size: [int] = [64]
-    p_greedy_sample: [bool] = [True]
+    p_greedy_sample: [bool] = [False]
     p_of_max_sample: [bool] = [False]
     p_quantile_sample: [bool] = [False]
-    prob: [float] = [0.4]
+    prob: [float] = [0.8]
     dqn_n_step: [float] = [25]
 
     # Create scripts for each combination of hyperparameters

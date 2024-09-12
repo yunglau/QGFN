@@ -11,6 +11,7 @@ import torch_geometric.data as gd
 from rdkit.Chem.rdchem import Mol as RDMol
 from torch import Tensor
 from torch.utils.data import Dataset
+import time
 
 from gflownet.algo.q_learning import QLearning
 from gflownet.config import Config
@@ -124,6 +125,9 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
         
     def setup_model(self):
         super().setup_model()
+        print("Logit multiplier: ", 1 / self.algo.entropy_coefficient)
+        self.model.logit_multiplier = 1 / self.algo.entropy_coefficient  # Softmax_lambda/LogSumExp_lambda in MunDQN
+
         self.second_model = GraphTransformerGFN(
             self.second_ctx,
             self.cfg, 
@@ -176,22 +180,33 @@ class SEHDoubleModelTrainer(StandardOnlineTrainer):
             persistent_workers=self.cfg.num_workers > 0,
             # The 2 here is an odd quirk of torch 1.10, it is fixed and
             # replaced by None in torch 2.
-            prefetch_factor=1 if self.cfg.num_workers else 2,
-            # prefetch_factor=None
+            # prefetch_factor=1 if self.cfg.num_workers else 2,
+            prefetch_factor=None
         )
 
     def train_batch(self, batch: BatchTuple, epoch_idx: int, batch_idx: int, train_it: int) -> Dict[str, Any]:
+        # start = time.time()
         gfn_batch, second_batch = batch
-        loss, info = self.algo.compute_batch_losses(self.model, gfn_batch)
-        sloss, sinfo = self.second_algo.compute_batch_losses(self.second_model, second_batch, self.second_model_lagged, temp_cond=False)
-        self.step(loss + sloss, train_it)  # TODO: clip second model gradients?
-        info.update({f"sec_{k}": v for k, v in sinfo.items()})
+        # print(gfn_batch)
+        loss, info, td_error = self.algo.compute_batch_losses(self.model, self.sampling_model, gfn_batch)
+        # Update replay buffer priorities 
+        replay_buffer = self.replay_buffer.update_priorities(gfn_batch.idxs, td_error)
+        # sloss, sinfo = self.second_algo.compute_batch_losses(self.second_model, second_batch, self.second_model_lagged, temp_cond=False)
+        self.step(loss, train_it)  # TODO: clip second model gradients?
+        # info.update({f"sec_{k}": v for k, v in sinfo.items()})
         if hasattr(batch, "extra_info"):
             info.update(batch.extra_info)
+        # print(">>>>>>>>>>>>>>>>>>>>>>>>> train_batch function")
+        # end = time.time()
+        # print(end - start)
         return {k: v.item() if hasattr(v, "item") else v for k, v in info.items()}
 
     def step(self, loss, train_it):
+        # start = time.time()
         super().step(loss)
+        # print(">>>>>>>>>>>>>>>>>>>>>>>>> train_batch function")
+        # end = time.time()
+        # print(end - start)
         if self.dqn_tau > 0 and train_it % self.ddqn_update_step == 0:
             for a, b in zip(self.second_model.parameters(), self.second_model_lagged.parameters()):
                 b.data.mul_(self.dqn_tau).add_(a.data * (1 - self.dqn_tau))
